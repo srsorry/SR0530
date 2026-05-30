@@ -261,16 +261,16 @@ def merge_and_diagnose(df_patients, df_axial):
         for _, row in missing_patient.iterrows():
             print(f"   -> ID: {row['Patient ID']}, Eye: {row['Eye']}")
 
-    # 4. 构建最终用于机器学习的矩阵
-    # 通常机器学习中，我们以患者图像数据(左表)为主导。
-    # 所以我们剔除掉那些连CSV图像数据都没有的 right_only 行
-    final_ml_df = merged_df[merged_df['_merge'] != 'right_only'].copy()
-
-    # 丢掉辅助列 _merge
-    final_ml_df = final_ml_df.drop(columns=['_merge'])
+    # # 4. 构建最终用于机器学习的矩阵
+    # # 通常机器学习中，我们以患者图像数据(左表)为主导。
+    # # 所以我们剔除掉那些连CSV图像数据都没有的 right_only 行
+    # final_ml_df = merged_df[merged_df['_merge'] != 'right_only'].copy()
+    #
+    # # 丢掉辅助列 _merge
+    # final_ml_df = final_ml_df.drop(columns=['_merge'])
 
     print("\n" + "=" * 50)
-    print(f"🚀 最终生成的机器学习宽表形状: {final_ml_df.shape}")
+    print(f"🚀 最终生成的机器学习宽表形状: {matched.shape}")
     print("提示：对于没有眼轴数据的患者，其对应眼轴特征列已自动填充为 NaN。")
     print("后续可使用 sklearn 的 SimpleImputer 进行缺失值插补。")
     print("=" * 50)
@@ -297,4 +297,7 @@ else:
     print("未能成功提取数据，请检查文件路径或文件内容。")
 
 df = merge_and_diagnose(df_test,df_axial)
+df.to_csv('../orgData/orgData.csv', index=False, encoding='utf-8-sig')
+
+
 pass
