@@ -1,16 +1,90 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+import os
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import numpy as np
 
+# ================= 配置区 =================
+FILE_PATH = '../genData/CleanData/data0.csv'
+OUTPUT_PDF1 = '../genData/FIGB/FIGB1.pdf'
+OUTPUT_PDF2 = '../genData/FIGB/FIGB2.pdf'
+
+def genFig1():
+    if not os.path.exists(FILE_PATH):
+        # 兼容当前目录下直接运行的情况
+        FILE_PATH_FALLBACK = 'data0.csv'
+        if os.path.exists(FILE_PATH_FALLBACK):
+            file_to_read = FILE_PATH_FALLBACK
+        else:
+            raise FileNotFoundError(f"找不到数据文件，请确认路径。")
+    else:
+        file_to_read = FILE_PATH
+
+    # 1. 读取数据并清理空值
+    df = pd.read_csv(file_to_read)
+    df = df.dropna(subset=['Axial length (mm)', 'Spherical equivalent refraction (D)'])
+
+    # 【修改 1】：互换 X 轴和 Y 轴
+    x = df['Spherical equivalent refraction (D)']
+    y = df['Axial length (mm)']
+
+    # 2. 计算皮尔逊相关系数 (r) 和 线性回归
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+
+    # 3. 绘图设置
+    plt.figure(figsize=(8, 6), dpi=150)
+    sns.set_theme(style="ticks")
+
+    # 绘制散点图 (增加黑色的描边，使点位层次分明)
+    plt.scatter(x, y, color='dodgerblue', edgecolor='black', s=60, alpha=0.8, zorder=2)
+
+    # 绘制回归直线
+    x_fit = x.sort_values()
+    y_fit = slope * x_fit + intercept
+    plt.plot(x_fit, y_fit, color='red', linewidth=2.5, linestyle='-', zorder=1)
+
+    # 4. 图表美化与标签
+    plt.xlabel('Spherical Equivalent Refraction (D)', fontsize=14, fontweight='bold')
+    plt.ylabel('Axial Length (mm)', fontsize=14, fontweight='bold')
+
+    # 【修改 2】：自动生成线性回归方程式并加入显示
+    if p_value < 0.0001:
+        p_str = "P < 0.0001"
+    else:
+        p_str = f"P = {p_value:.4f}"
+
+    # 格式化方程式，自动处理截距的正负号 (例如 y = -0.3x + 24.5)
+    eq_str = f"y = {slope:.3f}x {'+' if intercept > 0 else '-'} {abs(intercept):.3f}"
+
+    # 将表达式、r值和P值组合起来
+    stats_text = f"{eq_str}\nr = {r_value:.3f}\n{p_str}"
+
+    # 在右上角显示文本框
+    plt.text(0.95, 0.95, stats_text, transform=plt.gca().transAxes,
+             fontsize=13, fontweight='bold',
+             verticalalignment='top', horizontalalignment='right',
+             bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='gray'))
+
+    # 去除多余的顶部和右侧边框
+    sns.despine()
+
+    # 5. 保存与展示
+    plt.tight_layout()
+    plt.savefig(OUTPUT_PDF1, format='pdf', dpi=1200, bbox_inches='tight')
+    print(f"✅ 图表已保存为高精度矢量 PDF: {OUTPUT_PDF1}")
+    print(f"📊 统计结果: 表达式 {eq_str}, r = {r_value:.3f}, P 值 = {p_value:.2e}")
+
+    plt.show()
 
 def standardize(series):
     """Z-score 标准化：(x - mean) / std，用于提取标准化回归系数 (r)"""
     return (series - series.mean()) / series.std(ddof=1)
 
 
-def plot_figure2_gee_only_wide(csv_path="data0.csv"):
+def genFig2(csv_path="data0.csv"):
     print("=" * 70)
     print("📊 正在读取数据，执行 GEE 多因素回归 (加宽 X 轴版)...")
 
@@ -122,12 +196,16 @@ def plot_figure2_gee_only_wide(csv_path="data0.csv"):
     ax.tick_params(axis='y', length=0)
 
     plt.tight_layout()
-    out_file = "Figure2_GEE_Only_Forest_Multiline_Wide.pdf"
+    out_file = OUTPUT_PDF2
     plt.savefig(out_file, bbox_inches='tight', facecolor='white')
     print(f"✅ X轴拉宽版图表已成功生成！矢量图保存在: {out_file}")
 
     plt.show()
 
 
-if __name__ == "__main__":
-    plot_figure2_gee_only_wide("../genData/CleanData/data0.csv")
+
+
+
+if __name__ == '__main__':
+    genFig1()
+    genFig2(FILE_PATH)

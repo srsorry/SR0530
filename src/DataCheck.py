@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from cal_ACD import add_angular_density
 import os
-
+import re
 OUTPUT_DIR = '../genData'
 
 def generate_baseline_table_total(df):
@@ -171,6 +171,7 @@ def generate_11_distance_datasets(df_with_angular, output_dir="../genData/distan
                 records.append({
                     'Axial length (mm)': row.get('Axial length (mm)', np.nan),
                     'Age': row.get('Age', np.nan),
+                    'Eye': row.get('Eye',np.nan),
                     'Spherical equivalent refraction (D)': row.get('Spherical equivalent refraction (D)', np.nan),
                     'Gender': row.get('Gender', np.nan),
                     'Corneal curvature (mm)': r1_val,
@@ -202,13 +203,129 @@ def generate_11_distance_datasets(df_with_angular, output_dir="../genData/distan
     print(f"📁 完美！11 个标准格式的数据集均已输出至: {output_dir}")
 
 
+def get_patient_signature(row):
+    """
+    提取患者的“生理指纹”。
+    由于这 6 个基线特征对于同一只眼睛是绝对固定且唯一的，
+    我们可以用它们组合成一个元组，在跨文件时精准识别同一个人。
+    """
+    return (
+        round(row['Axial length (mm)'], 4),
+        row['Age'],
+        row['Spherical equivalent refraction (D)'],
+        row['Gender'],
+        round(row['Corneal curvature (mm)'], 4),
+        round(row['Anterior chamber depth (mm)'], 4)
+    )
+
+
+def clean_data():
+    print("=" * 70)
+    print("🧹 开始执行智能跨文件数据清洗与连续 Subject_ID 映射 (含排序输出)...")
+
+    DATA_DIR = '../genData/distance_datasets'
+    OUT_DIR = '../genData/CleanData'
+
+    if not os.path.exists(DATA_DIR):
+        raise FileNotFoundError(f"找不到文件夹: {DATA_DIR}，请确保路径正确！")
+
+    if not os.path.exists(OUT_DIR):
+        os.makedirs(OUT_DIR)
+
+    file_paths = []
+    for f in os.listdir(DATA_DIR):
+        if f.startswith('data') and f.endswith('.csv'):
+            file_paths.append(os.path.join(DATA_DIR, f))
+
+    file_paths.sort(key=lambda f: int(re.search(r'\d+', os.path.basename(f)).group()))
+
+    if not file_paths:
+        print("⚠️ 未找到任何 data*.csv 文件！")
+        return
+
+    # ==========================================
+    # 第一阶段：全局扫描，建立统一的患者花名册和黑名单
+    # ==========================================
+    all_signatures = set()
+    blacklist_signatures = set()
+
+    for fp in file_paths:
+        df = pd.read_csv(fp)
+        for _, row in df.iterrows():
+            sig = get_patient_signature(row)
+            all_signatures.add(sig)
+
+            if row.get('Angular cone density (cones/ deg2)', 0) > 7000:
+                blacklist_signatures.add(sig)
+
+    # 剔除黑名单后的纯净“生理指纹”池
+    valid_signatures = sorted(list(all_signatures - blacklist_signatures))
+
+    # 生成全局连续的 Subject_ID 映射字典 (从 Eye_001 到 Eye_N)
+    subject_id_map = {sig: f"Eye_{i + 1:03d}" for i, sig in enumerate(valid_signatures)}
+
+    print(f"🔍 全局扫描完毕：")
+    print(f"   -> 发现异常患者(全局剔除): {len(blacklist_signatures)} 名")
+    print(f"   -> 剩余纯净有效患者总数 : {len(valid_signatures)} 名 (已分配 Eye_001 - Eye_{len(valid_signatures):03d})")
+    print("-" * 70)
+
+    # ==========================================
+    # 第二阶段：逐文件追加特征、排序并保存
+    # ==========================================
+    for fp in file_paths:
+        filename = os.path.basename(fp)
+        k = int(re.search(r'\d+', filename).group())
+        ecc_value = 1.0 + k * 0.5
+
+        df = pd.read_csv(fp)
+        cleaned_records = []
+
+        for _, row in df.iterrows():
+            sig = get_patient_signature(row)
+
+            if sig in subject_id_map:
+                row_dict = row.to_dict()
+
+                # 强制将 Subject_ID 和 Eccentricity 放在最前面
+                new_row = {
+                    'Subject_ID': subject_id_map[sig],
+                    'Eccentricity (mm)': ecc_value
+                }
+                new_row.update(row_dict)
+                cleaned_records.append(new_row)
+
+        # 转换为 DataFrame
+        if cleaned_records:
+            df_cleaned = pd.DataFrame(cleaned_records)
+
+            # ==========================================
+            # 🌟 新增核心：对 DataFrame 按 Subject_ID 排序
+            # ==========================================
+            df_cleaned = df_cleaned.sort_values(by='Subject_ID').reset_index(drop=True)
+
+            # 保存
+            out_file = os.path.join(OUT_DIR, filename)
+            df_cleaned.to_csv(out_file, index=False, encoding='utf-8-sig')
+            print(f"✅ 保存 {filename:<10} | 偏心率: {ecc_value:>4.1f} mm | 匹配有效样本: {len(df_cleaned)}")
+        else:
+            print(f"⚠️ {filename} 清洗后无有效数据！")
+
+    print("=" * 70)
+    print(f"📁 带有排序后连续 Subject_ID 的数据已保存至: {OUT_DIR}")
+
 # ========== 测试执行区 ==========
 if __name__ == "__main__":
     df = pd.read_csv('../orgData/orgData.csv')
     #加入角密度信息
     df = add_angular_density(df)
+    df.to_csv('../orgData/orgDataWithAng.csv', index=False, encoding='utf-8-sig')
+
     # 11组数据
     generate_11_distance_datasets(df)
+    clean_data()
+
+
+
 
     generate_baseline_table_total(df)
 

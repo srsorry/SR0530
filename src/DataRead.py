@@ -78,7 +78,7 @@ def flatten_patient_to_44_rois(file_path):
     features = {
         'Patient ID': fig_num,
         'Eye': eye_str,
-        'Age': age,
+        'Age_CAL': age,
         'Gender': gender,
         'Source_Class': source_class,
         'Eye_Type_Num': 1 if eye_str == 'OD' else 0,
@@ -224,7 +224,7 @@ def merge_and_diagnose(df_patients, df_axial):
 
     # 1. 解决列名冲突：剔除 df_axial 中与 df_patients 重复的基础信息列
     # 只保留关键的医学测量指标和合并主键
-    cols_to_drop = ['Age', 'Gender', 'Source', 'Source_Class']
+    cols_to_drop = ['Gender', 'Source', 'Source_Class']
     # 防御性剔除：确保这些列确实存在才剔除
     cols_to_drop = [c for c in cols_to_drop if c in df_axial.columns]
     df_axial_clean = df_axial.drop(columns=cols_to_drop)
