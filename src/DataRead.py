@@ -78,7 +78,7 @@ def flatten_patient_to_44_rois(file_path):
     features = {
         'Patient ID': fig_num,
         'Eye': eye_str,
-        'Age_CAL': age,
+        'Age': age,
         'Gender': gender,
         'Source_Class': source_class,
         'Eye_Type_Num': 1 if eye_str == 'OD' else 0,
@@ -239,6 +239,14 @@ def merge_and_diagnose(df_patients, df_axial):
         indicator=True
     )
 
+    # 2.5 处理年龄列冲突：以眼轴表（右表）中的 Age 为权威年龄
+    # merge 后可能出现 Age_x（来自 df_patients）和 Age_y（来自 df_axial）
+    if 'Age_x' in merged_df.columns and 'Age_y' in merged_df.columns:
+        # 权威年龄来自眼轴文件；若缺失则回退到文件计算年龄
+        merged_df['Age'] = merged_df['Age_y'].fillna(merged_df['Age_x'])
+        merged_df = merged_df.drop(columns=['Age_x', 'Age_y'])
+    # 若只有一边有 Age，列名保持不变
+
     # 3. 诊断报告提取
     matched = merged_df[merged_df['_merge'] == 'both']
     missing_axial = merged_df[merged_df['_merge'] == 'left_only']
@@ -261,13 +269,28 @@ def merge_and_diagnose(df_patients, df_axial):
         for _, row in missing_patient.iterrows():
             print(f"   -> ID: {row['Patient ID']}, Eye: {row['Eye']}")
 
-    # # 4. 构建最终用于机器学习的矩阵
-    # # 通常机器学习中，我们以患者图像数据(左表)为主导。
-    # # 所以我们剔除掉那些连CSV图像数据都没有的 right_only 行
-    # final_ml_df = merged_df[merged_df['_merge'] != 'right_only'].copy()
-    #
-    # # 丢掉辅助列 _merge
-    # final_ml_df = final_ml_df.drop(columns=['_merge'])
+    # 4. 将丢弃情况写入审计日志
+    os.makedirs('../genData/sum', exist_ok=True)
+    exclusion_log = []
+    for _, row in missing_axial.iterrows():
+        exclusion_log.append({
+            'Patient_ID': row['Patient ID'],
+            'Eye': row['Eye'],
+            'Reason': 'missing_axial'
+        })
+    for _, row in missing_patient.iterrows():
+        exclusion_log.append({
+            'Patient_ID': row['Patient ID'],
+            'Eye': row['Eye'],
+            'Reason': 'missing_patient_csv'
+        })
+    if exclusion_log:
+        pd.DataFrame(exclusion_log).to_csv(
+            '../genData/sum/merge_exclusion_log.csv',
+            index=False,
+            encoding='utf-8-sig'
+        )
+        print(f"\n📝 已保存合并丢弃日志: ../genData/sum/merge_exclusion_log.csv (共 {len(exclusion_log)} 条)")
 
     print("\n" + "=" * 50)
     print(f"🚀 最终生成的机器学习宽表形状: {matched.shape}")

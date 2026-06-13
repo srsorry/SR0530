@@ -113,8 +113,10 @@ def generate_baseline_table_total(df):
 
 def generate_11_distance_datasets(df_with_angular, output_dir="../genData/distance_datasets"):
     """
+    【注意：此 11 距离文件流当前未被分析脚本直接读取，主流程使用 gen_44ROIData.py 生成的 44 ROI 文件】
     针对 11 个空间距离，求 4 个象限（剔除异常血管）的各项微观特征平均值，
     并严格按照要求的格式输出为 data0.csv 到 data10.csv。
+    该函数保留为备用/快速查看用途。
     """
     print("=" * 70)
     print("📊 开始生成终极格式的 11 个子数据集 (data0.csv - data10.csv)...")
@@ -220,6 +222,10 @@ def get_patient_signature(row):
 
 
 def clean_data():
+    """
+    【注意：此 11 距离文件流当前未被分析脚本直接读取，主流程使用 gen_44ROIData.py 生成的 44 ROI 文件】
+    该函数保留为备用/快速查看用途。
+    """
     print("=" * 70)
     print("🧹 开始执行智能跨文件数据清洗与连续 Subject_ID 映射 (含排序输出)...")
 

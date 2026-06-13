@@ -36,7 +36,7 @@ warnings.filterwarnings('ignore')
 # 配置
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi')
+DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_strict')
 PAIR_PATH = os.path.join(BASE_DIR, 'genData', 'sum', 'Subject_Pair_Mapping.csv')
 OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -72,43 +72,20 @@ CONFIGS = {
 # ============================================================
 def load_subject_mapping():
     """
-    建立 Eye_xxx -> Patient ID -> Subject_ID 的映射
-    返回 dict: {Eye_ID: Subject_ID}
+    从 CleanDataRoi 直接读取真实 Subject_ID。
+    输入数据层修复后，data1.csv 已包含真实 Subject_ID（Subj_xxx / Single_xxx），
+    不再需要反向匹配 Patient ID。
+    返回 dict: {Eye_Label: Subject_ID}
     """
-    # 1. 加载配对表
-    pairs = pd.read_csv(PAIR_PATH)
-    pid_to_subject = {}
-    for _, row in pairs.iterrows():
-        pid_to_subject[int(row['OD_PatientID'])] = row['Subject_ID']
-        pid_to_subject[int(row['OS_PatientID'])] = row['Subject_ID']
-
-    # 2. CleanDataRoi -> orgData 的 Patient ID
-    df_org = pd.read_csv(os.path.join(BASE_DIR, 'orgData', 'orgData.csv'))
     df_ref = pd.read_csv(os.path.join(DATA_DIR, 'data1.csv'))
-
-    eye_to_pid = {}
-    for _, row in df_ref.iterrows():
-        eye = row['Eye']
-        al = row['Axial length (mm)']
-        age = row['Age']
-        se = row['Spherical equivalent refraction (D)']
-        gender = row['Gender']
-
-        mask = (df_org['Eye'] == eye) & \
-               (df_org['Axial length (mm)'] == al) & \
-               (df_org['Age'] == age) & \
-               (df_org['Spherical equivalent refraction (D)'] == se) & \
-               (df_org['Gender'] == gender)
-        matches = df_org[mask]
-        if len(matches) == 1:
-            eye_to_pid[row['Subject_ID']] = int(matches.iloc[0]['Patient ID'])
-        else:
-            raise ValueError(f"Cannot uniquely map {row['Subject_ID']} (matches={len(matches)})")
-
-    # 3. 单眼受试者使用 Single_PID 作为 Subject_ID
     eye_to_subject = {}
-    for eye_id, pid in eye_to_pid.items():
-        eye_to_subject[eye_id] = pid_to_subject.get(pid, f'Single_{pid}')
+
+    for _, row in df_ref.iterrows():
+        eye_label = row['Eye_Label']        # 如 Eye_001
+        subject_id = row['Subject_ID']      # 如 Subj_001 或 Single_10816
+        eye_to_subject[eye_label] = subject_id
+        # 恒等映射：兼容 aggregate_distance 中直接使用 Subject_ID 列的代码
+        eye_to_subject[subject_id] = subject_id
 
     return eye_to_subject
 
@@ -135,8 +112,8 @@ def aggregate_distance(dfs, dist, eye_to_subject):
 
     for i, d in enumerate(dfs[1:], 2):
         base = base.merge(
-            d[['Subject_ID', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
-            on='Subject_ID', how='inner'
+            d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
+            on=['Subject_ID', 'Eye'], how='inner'
         )
 
     den_cols = [c for c in base.columns if c.startswith('density_q')]
@@ -171,7 +148,9 @@ def eval_model_group_cv(model, X, y, groups, use_y_std=False):
     按真实 Subject 做 GroupKFold 交叉验证。
     groups: 每个样本对应的 Real_Subject_ID
     """
-    n_splits = min(10, len(np.unique(groups)))
+    n_splits = min(5, len(np.unique(groups)) // 2)
+    if n_splits < 2:
+        n_splits = 2
     gkf = GroupKFold(n_splits=n_splits)
 
     train_r2_list, test_r2_list = [], []
@@ -224,7 +203,9 @@ def tune_model_group_cv(model, param_dist, X, y, groups, n_iter=15, use_y_std=Fa
     best_score = -np.inf
     best_params = None
 
-    n_splits = min(5, len(np.unique(groups)))
+    n_splits = min(5, len(np.unique(groups)) // 2)
+    if n_splits < 2:
+        n_splits = 2
     gkf = GroupKFold(n_splits=n_splits)
 
     for _ in range(n_iter):

@@ -1,13 +1,15 @@
 """
 SR_ML_kimi_v2.py
-Kimi 方案 v2.0：机器学习预测模型优化
-- 方案 A: [AL, Age, Gender, ACD, K]
-- 方案 B: [SE, Age, Gender]
-- 方案 C: [AL, SE, Age, Gender, ACD, K]（Ridge 处理共线性）
+Kimi 方案 v2.0：机器学习预测模型优化（对齐 SR_ML_task2.py 新策略）
+- 方案 A1: [AL, Age, Gender]
+- 方案 A2: [AL, ACD, Age, Gender]
+- 方案 B:  [SE, Age, Gender]
+- 方案 C1: [SE, AL, Age, Gender]
 - CV: StratifiedGroupKFold（按 Subject 分层，按近视状态分层）
 - 补充验证: LOOCV + Bootstrap optimism-corrected R2
 - 模型: SVM / RF / XGBoost / Neural Network / Lasso / ElasticNet / Ridge
-- SHAP + Permutation Importance + Calibration + Brier Score
+- 可解释性: 标准化回归系数 + Bootstrap 95% CI + Permutation Importance
+- Calibration + Brier Score
 """
 
 import os
@@ -34,7 +36,6 @@ from sklearn.inspection import permutation_importance
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from xgboost import XGBRegressor
 from copy import deepcopy
-import shap
 import statsmodels.api as sm
 
 warnings.filterwarnings('ignore')
@@ -43,8 +44,7 @@ warnings.filterwarnings('ignore')
 # 配置
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ORG_PATH = os.path.join(BASE_DIR, 'orgData', 'orgData.csv')
-DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi')
+DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_strict')
 PAIR_PATH = os.path.join(BASE_DIR, 'genData', 'sum', 'Subject_Pair_Mapping.csv')
 OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -63,9 +63,10 @@ FEATURE_ALL = {
 }
 
 SCHEMA = {
-    'A_Biomechanical': ['AL', 'Age', 'Gender', 'ACD', 'K'],
+    'A1_Biomechanical_Core': ['AL', 'Age', 'Gender'],
+    'A2_Biomechanical_NoK': ['AL', 'ACD', 'Age', 'Gender'],
     'B_Clinical': ['SE', 'Age', 'Gender'],
-    'C_Full_Ridge': ['AL', 'SE', 'Age', 'Gender', 'ACD', 'K']
+    'C1_Combined': ['SE', 'AL', 'Age', 'Gender']
 }
 
 MYOPIA_THRESHOLD = -0.5
@@ -77,37 +78,20 @@ N_BOOTSTRAP = 500
 # 工具函数
 # ============================================================
 def load_subject_mapping():
-    """建立 Eye_xxx -> 真实 Subject_ID 映射"""
-    pairs = pd.read_csv(PAIR_PATH)
-    pid_to_subject = {}
-    for _, row in pairs.iterrows():
-        pid_to_subject[int(row['OD_PatientID'])] = row['Subject_ID']
-        pid_to_subject[int(row['OS_PatientID'])] = row['Subject_ID']
-
-    df_org = pd.read_csv(ORG_PATH)
+    """
+    从 CleanDataRoi_strict 直接读取真实 Subject_ID。
+    输入数据层修复后，data1.csv 已包含真实 Subject_ID（Subj_xxx / Single_xxx），
+    不再需要反向匹配 Patient ID。
+    """
     df_ref = pd.read_csv(os.path.join(DATA_DIR, 'data1.csv'))
-
-    eye_to_pid = {}
-    for _, row in df_ref.iterrows():
-        eye = row['Eye']
-        al = row['Axial length (mm)']
-        age = row['Age']
-        se = row['Spherical equivalent refraction (D)']
-        gender = row['Gender']
-        mask = (df_org['Eye'] == eye) & \
-               (df_org['Axial length (mm)'] == al) & \
-               (df_org['Age'] == age) & \
-               (df_org['Spherical equivalent refraction (D)'] == se) & \
-               (df_org['Gender'] == gender)
-        matches = df_org[mask]
-        if len(matches) == 1:
-            eye_to_pid[row['Subject_ID']] = int(matches.iloc[0]['Patient ID'])
-        else:
-            raise ValueError(f"Cannot uniquely map {row['Subject_ID']}: {len(matches)} matches")
-
     eye_to_subject = {}
-    for eye_id, pid in eye_to_pid.items():
-        eye_to_subject[eye_id] = pid_to_subject.get(pid, f'Single_{pid}')
+
+    for _, row in df_ref.iterrows():
+        eye_label = row['Eye_Label']        # 如 Eye_001
+        subject_id = row['Subject_ID']      # 如 Subj_001 或 Single_10816
+        eye_to_subject[eye_label] = subject_id
+        # 恒等映射：兼容 aggregate_distance 中直接使用 Subject_ID 列的代码
+        eye_to_subject[subject_id] = subject_id
 
     return eye_to_subject
 
@@ -125,14 +109,14 @@ def load_distance_data():
 
 
 def aggregate_distance(dfs, dist, eye_to_subject):
-    """对同一距离的 4 个象限数据取平均角密度，并映射真实 Subject"""
+    """对同一距离的 4 个象限数据取平均角密度，按 Subject_ID + Eye 聚合，并映射真实 Subject"""
     base = dfs[0][['Subject_ID', 'Eye'] + list(FEATURE_ALL.values()) + [TARGET_COL]].copy()
     base = base.rename(columns={TARGET_COL: 'density_q1'})
 
     for i, d in enumerate(dfs[1:], 2):
         base = base.merge(
-            d[['Subject_ID', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
-            on='Subject_ID', how='inner'
+            d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
+            on=['Subject_ID', 'Eye'], how='inner'
         )
 
     den_cols = [c for c in base.columns if c.startswith('density_q')]
@@ -172,13 +156,23 @@ def stratified_group_kfold(groups, y, n_splits=5, random_state=42):
     group_info = df_idx.groupby('group').agg({'y': lambda x: int(x.mode()[0]), 'idx': list}).reset_index()
     group_info = group_info.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
-    pos_groups = group_info[group_info['y'] == 1].copy()
-    neg_groups = group_info[group_info['y'] == 0].copy()
+    pos_groups = group_info[group_info['y'] == 1].copy().reset_index(drop=True)
+    neg_groups = group_info[group_info['y'] == 0].copy().reset_index(drop=True)
 
     folds = [[] for _ in range(n_splits)]
     for label_df in [pos_groups, neg_groups]:
+        n_groups = len(label_df)
+        if n_groups == 0:
+            continue
         for i, row in label_df.iterrows():
             folds[i % n_splits].extend(row['idx'])
+
+    # 保护：如果某 fold 为空，从最大的 fold 借调一个 group
+    for i in range(n_splits):
+        if not folds[i]:
+            largest_idx = max(range(n_splits), key=lambda k: len(folds[k]))
+            moved = folds[largest_idx].pop()
+            folds[i].append(moved)
 
     splits = []
     for i in range(n_splits):
@@ -393,45 +387,152 @@ def eval_bootstrap(model, X, y, groups, use_y_std=False, n_bootstrap=N_BOOTSTRAP
 
 
 # ============================================================
-# SHAP + Permutation Importance + Calibration
+# 标准化回归系数分析（替代 SHAP）
 # ============================================================
-def prepare_model_for_shap(model, X, y):
-    """返回可直接用于 SHAP 的 estimator 和标准化后的 X"""
-    if isinstance(model, Pipeline):
-        scaler = model.named_steps['s']
-        estimator = model.named_steps[list(model.named_steps.keys())[-1]]
-        X_s = scaler.fit_transform(X)
-        estimator.fit(X_s, y)
-        return estimator, X_s
-    else:
-        model.fit(X, y)
-        return model, X.values
+def get_standardized_coefficients(model, feature_names):
+    """
+    提取标准化回归系数（仅适用于带 StandardScaler 的 Pipeline 线性模型）。
+    返回 DataFrame: Feature, Coef, Abs_Coef
+    """
+    try:
+        if hasattr(model, 'named_steps'):
+            scaler = model.named_steps.get('s', None)
+            est = model.named_steps[list(model.named_steps.keys())[-1]]
+        else:
+            scaler = None
+            est = model
+
+        if not hasattr(est, 'coef_'):
+            return None
+
+        raw_coef = est.coef_.ravel()
+        coef = raw_coef
+        return pd.DataFrame({
+            'Feature': feature_names,
+            'Coef': coef,
+            'Abs_Coef': np.abs(coef)
+        }).sort_values('Abs_Coef', ascending=False)
+    except Exception:
+        return None
 
 
-def run_shap(model, X, y, feature_names):
-    """对最佳模型计算 SHAP"""
-    est, X_s = prepare_model_for_shap(model, X, y)
-    X_s = np.asarray(X_s)
+def bootstrap_coefficients(model_builder, X, y, groups, y_strat, feature_names,
+                           n_splits=5, n_boot=500, random_state=42):
+    """
+    对最佳线性模型做 Bootstrap 标准化系数估计，返回系数及其 95% CI。
+    model_builder: 返回一个可 fit/predict 的模型实例的函数
+    """
+    rng = np.random.RandomState(random_state)
+    coef_boot = []
 
-    if hasattr(est, 'get_booster') or hasattr(est, 'estimators_'):
-        explainer = shap.TreeExplainer(est)
-        shap_values = explainer.shap_values(X_s)
-    elif hasattr(est, 'coef_'):
-        explainer = shap.LinearExplainer(est, X_s)
-        shap_values = explainer.shap_values(X_s)
-    else:
-        background = shap.sample(X_s, min(50, len(X_s)), random_state=RANDOM_STATE)
-        explainer = shap.KernelExplainer(est.predict, background)
-        shap_values = explainer.shap_values(X_s, nsamples=min(100, len(X_s)))
+    for b in range(n_boot):
+        idx = rng.choice(len(X), size=len(X), replace=True)
+        X_b = X.iloc[idx] if hasattr(X, 'iloc') else X[idx]
+        y_b = y.iloc[idx] if hasattr(y, 'iloc') else y[idx]
 
-    mean_shap = np.abs(shap_values).mean(axis=0)
-    shap_df = pd.DataFrame({
+        model = model_builder()
+        model.fit(X_b, y_b)
+
+        coef_df = get_standardized_coefficients(model, feature_names)
+        if coef_df is not None:
+            coef_boot.append(coef_df.set_index('Feature')['Coef'].to_dict())
+
+    if not coef_boot:
+        return None
+
+    coef_matrix = pd.DataFrame(coef_boot)
+    summary = pd.DataFrame({
         'Feature': feature_names,
-        'Mean_SHAP': mean_shap
-    }).sort_values('Mean_SHAP', ascending=False)
-    return shap_df, shap_values, X_s
+        'Mean_Coef': coef_matrix.mean().values,
+        'CI_Lower': coef_matrix.quantile(0.025).values,
+        'CI_Upper': coef_matrix.quantile(0.975).values
+    })
+    summary['CI_Includes_Zero'] = (summary['CI_Lower'] <= 0) & (summary['CI_Upper'] >= 0)
+    return summary
 
 
+def run_coefficient_analysis(df, feature_cols_short, feature_cols_full, model_name='ElasticNet'):
+    """
+    对最佳线性模型提取标准化回归系数，并通过 Bootstrap 计算 95% CI。
+    返回：coef_summary DataFrame, full_model（在全部数据上拟合的模型）
+    """
+    df = fill_na(df, feature_cols_full)
+    X = df[feature_cols_full]
+    y = df[TARGET_COL]
+
+    if model_name == 'ElasticNet':
+        full_model = Pipeline([
+            ('s', StandardScaler()),
+            ('en', ElasticNetCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+        ])
+    elif model_name == 'Ridge':
+        full_model = Pipeline([
+            ('s', StandardScaler()),
+            ('ridge', RidgeCV(cv=3))
+        ])
+    elif model_name == 'Lasso':
+        full_model = Pipeline([
+            ('s', StandardScaler()),
+            ('lasso', LassoCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+        ])
+    else:
+        full_model = Pipeline([
+            ('s', StandardScaler()),
+            ('en', ElasticNetCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+        ])
+
+    full_model.fit(X, y)
+
+    def model_builder():
+        if model_name == 'ElasticNet':
+            return Pipeline([
+                ('s', StandardScaler()),
+                ('en', ElasticNetCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+            ])
+        elif model_name == 'Ridge':
+            return Pipeline([
+                ('s', StandardScaler()),
+                ('ridge', RidgeCV(cv=3))
+            ])
+        elif model_name == 'Lasso':
+            return Pipeline([
+                ('s', StandardScaler()),
+                ('lasso', LassoCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+            ])
+        else:
+            return Pipeline([
+                ('s', StandardScaler()),
+                ('en', ElasticNetCV(cv=3, random_state=RANDOM_STATE, max_iter=5000))
+            ])
+
+    coef_summary = bootstrap_coefficients(
+        model_builder, X, y,
+        groups=df['Real_Subject_ID'].values,
+        y_strat=df['Myopia'].values,
+        feature_names=feature_cols_short,
+        n_boot=500,
+        random_state=RANDOM_STATE
+    )
+
+    point_coef = get_standardized_coefficients(full_model, feature_cols_short)
+    if point_coef is not None and coef_summary is not None:
+        coef_summary = coef_summary.merge(
+            point_coef[['Feature', 'Coef']],
+            on='Feature',
+            how='left'
+        )
+    elif point_coef is not None:
+        coef_summary = point_coef.rename(columns={'Coef': 'Mean_Coef'})
+        coef_summary['CI_Lower'] = np.nan
+        coef_summary['CI_Upper'] = np.nan
+        coef_summary['CI_Includes_Zero'] = np.nan
+
+    return coef_summary, full_model
+
+
+# ============================================================
+# Permutation Importance + Calibration
+# ============================================================
 def run_permutation_importance(model, X_test, y_test, feature_names):
     r = permutation_importance(model, X_test, y_test, n_repeats=30, random_state=RANDOM_STATE, scoring='r2')
     imp_df = pd.DataFrame({
@@ -462,7 +563,7 @@ def plot_calibration(y_true, y_pred, title, out_path):
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_path, dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(FIG_DIR, os.path.basename(out_path)),dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(out_path)), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -482,7 +583,7 @@ def calc_vif(df, feature_short):
 # ============================================================
 # 可视化
 # ============================================================
-def plot_overview(ml_results, best_cfg):
+def plot_overview(ml_results, coef_results, best_cfg):
     df_ml = pd.DataFrame(ml_results)
 
     fig, axes = plt.subplots(2, 3, figsize=(18, 11))
@@ -503,21 +604,20 @@ def plot_overview(ml_results, best_cfg):
         ax.set_title(f'{chr(65+i)}. {t} by Distance (Best Schema)')
         ax.legend(loc='best', fontsize=7)
 
+    # 最佳 Schema 的标准化回归系数（替代 SHAP）
     ax = axes[1, 2]
-    best_per_schema = df_ml.loc[df_ml.groupby(['Distance', 'Schema'])['test_r2'].idxmax()]
-    for schema in SCHEMA.keys():
-        sub = best_per_schema[best_per_schema['Schema'] == schema]
-        ax.plot(sub['Distance'], sub['test_r2'], 'o-', label=schema, linewidth=2, markersize=6)
-    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
-    ax.set_xlabel('Distance (mm)')
-    ax.set_ylabel('Best Test R2')
-    ax.set_title(f'F. Best Test R2 per Schema\nBest: {best_cfg["dist"]:.1f}mm {best_cfg["schema"]} {best_cfg["model"]}')
-    ax.legend()
+    best_coef = coef_results[best_cfg['schema']].copy()
+    best_coef = best_coef.sort_values('Coef', ascending=True)
+    colors = ['#e74c3c' if c < 0 else '#2ecc71' for c in best_coef['Coef']]
+    ax.barh(best_coef['Feature'], best_coef['Coef'], color=colors, edgecolor='black')
+    ax.axvline(0, color='black', linewidth=0.8)
+    ax.set_xlabel('Standardized Coefficient')
+    ax.set_title(f'F. Std Coefficients at {best_cfg["dist"]:.1f} mm ({best_cfg["schema"]}, {best_cfg["model"]})')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     fig_path = os.path.join(OUT_DIR, 'SR0530_kimi_v2_Overview.png')
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
 
@@ -539,19 +639,7 @@ def plot_schema_comparison(schema_results):
     fig_path = os.path.join(OUT_DIR, 'SR0530_kimi_v2_SchemaComparison.png')
     plt.tight_layout()
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f'  --> Saved: {fig_path}')
-
-
-def plot_shap_summary(shap_values, X_s, feature_names, best_cfg):
-    fig, ax = plt.subplots(figsize=(10, 6))
-    shap.summary_plot(shap_values, X_s, feature_names=feature_names, show=False)
-    ax.set_title(f'SHAP Summary: {best_cfg["schema"]} at {best_cfg["dist"]:.1f} mm ({best_cfg["model"]})')
-    fig_path = os.path.join(OUT_DIR, 'SR0530_kimi_v2_SHAP_Summary.png')
-    plt.tight_layout()
-    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
 
@@ -559,27 +647,33 @@ def plot_shap_summary(shap_values, X_s, feature_names, best_cfg):
 # ============================================================
 # MD 报告
 # ============================================================
-def generate_md_report(df_ml, df_schema, vif_df, shap_df, perm_df, best_cfg, calib_stats):
+def generate_md_report(df_ml, df_schema, vif_df, coef_df, lasso_df, perm_df, best_cfg, calib_stats):
     md = []
     md.append("# SR0530 ML Optimization Report (Kimi v2.0)\n\n")
     md.append("> **目标**：基于常规眼科参数建立视锥细胞密度预测模型。\n")
-    md.append("> **策略**：方案 A（生物力学）、方案 B（临床筛查）、方案 C（全特征+Ridge）。\n")
-    md.append("> **验证**：StratifiedGroupKFold + LOOCV + Bootstrap optimism-corrected R2。\n\n")
+    md.append("> **策略**：四方案 (A1/A2/B/C1) + Subject/近视分层 CV + LOOCV + Bootstrap + 标准化回归系数。\n")
+    md.append("> **数据**：genData/CleanDataRoi_strict/。\n\n")
 
     md.append("---\n\n")
     md.append("## 一、VIF 共线性诊断\n\n")
     md.append("| 特征 | VIF |\n|------|-----|\n")
     for _, row in vif_df.iterrows():
         md.append(f"| {row['Feature']} | {row['VIF']:.2f} |\n")
-    md.append("\n*注：VIF > 10 提示严重共线性。\n\n")
+    md.append("\n*注：VIF > 10 提示严重共线性。方案 A1（仅 AL+Age+Gender）和 B（SE+Age+Gender）可彻底消除共线性。\n\n")
 
-    md.append("## 二、方案对比（每距离最佳模型 Test R2）\n\n")
+    md.append("## 二、方案说明\n\n")
+    md.append("- **A1_Biomechanical_Core**：`[AL, Age, Gender]`，最精简，彻底消除共线性。\n")
+    md.append("- **A2_Biomechanical_NoK**：`[AL, ACD, Age, Gender]`，剔除与 AL 共线性最高的 K。\n")
+    md.append("- **B_Clinical**：`[SE, Age, Gender]`，临床筛查模型。\n")
+    md.append("- **C1_Combined**：`[SE, AL, Age, Gender]`，同时包含 SE 和 AL，但剔除 K/ACD。\n\n")
+
+    md.append("## 三、方案对比（每距离最佳模型 Test R2）\n\n")
     md.append("| 距离 (mm) | 方案 | 最佳模型 | Test R2 |\n")
     md.append("|-----------|------|----------|---------|\n")
     for _, row in df_schema.iterrows():
         md.append(f"| {row['Distance']:.1f} | {row['Schema']} | {row['Best_Model']} | {row['Best_Test_R2']:.3f} |\n")
 
-    md.append("\n## 三、全部模型结果\n\n")
+    md.append("\n## 四、全部模型结果\n\n")
     md.append("| 距离 | 方案 | 模型 | N_eyes | N_subj | Train R2 | Test R2 | Corr | MAPE(%) | RMSE | MAE | Brier | Gap | LOOCV R2 | Boot R2_corr |\n")
     md.append("|------|------|------|--------|--------|----------|---------|------|---------|------|-----|-------|-----|----------|--------------|\n")
     for _, row in df_ml.iterrows():
@@ -591,28 +685,37 @@ def generate_md_report(df_ml, df_schema, vif_df, shap_df, perm_df, best_cfg, cal
                   f"{row['test_mape']:.2f} | {row['test_rmse']:.1f} | {row['test_mae']:.1f} | "
                   f"{row['test_brier']:.1f} | {row['gap']:.3f} | {loo} | {boot} |\n")
 
-    md.append(f"\n**总体最佳配置**：距离 **{best_cfg['dist']:.1f} mm**，方案 **{best_cfg['schema']}**，模型 **{best_cfg['model']}**，Test R2 = **{best_cfg['test_r2']:.3f}**。\n\n")
+    md.append(f"\n**总体最佳配置**：距离 **{best_cfg['dist']:.1f} mm**，方案 **{best_cfg['schema']}**，"
+              f"模型 **{best_cfg['model']}**，Test R2 = **{best_cfg['test_r2']:.3f}**。\n\n")
 
-    md.append("## 四、最佳模型 SHAP 与 Permutation Importance\n\n")
-    md.append("### SHAP\n\n")
-    md.append("| 特征 | Mean |SHAP| |\n|------|-------------|\n")
-    for _, row in shap_df.iterrows():
-        md.append(f"| {row['Feature']} | {row['Mean_SHAP']:.3f} |\n")
+    md.append("## 五、标准化回归系数（替代 SHAP）\n\n")
+    md.append(f"对总体最佳配置（{best_cfg['schema']}，{best_cfg['dist']:.1f} mm）进行 Bootstrap 标准化系数分析：\n\n")
+    md.append("| 特征 | Coef | 95% CI Lower | 95% CI Upper | CI Includes Zero |\n")
+    md.append("|------|------|--------------|--------------|------------------|\n")
+    for _, row in coef_df.iterrows():
+        includes_zero = "是" if row['CI_Includes_Zero'] else "否"
+        md.append(f"| {row['Feature']} | {row['Coef']:.3f} | {row['CI_Lower']:.3f} | {row['CI_Upper']:.3f} | {includes_zero} |\n")
 
-    md.append("\n### Permutation Importance\n\n")
+    md.append("\n## 六、Lasso 补充分析\n\n")
+    md.append(f"在总体最佳距离（{best_cfg['dist']:.1f} mm）使用方案 A2 特征运行 Lasso：\n\n")
+    md.append("| 特征 | Lasso Coef |\n")
+    md.append("|------|------------|\n")
+    for _, row in lasso_df.iterrows():
+        md.append(f"| {row['Feature']} | {row['Coef']:.3f} |\n")
+
+    md.append("\n## 七、Permutation Importance\n\n")
     md.append("| 特征 | Importance | Std |\n|------|------------|-----|\n")
     for _, row in perm_df.iterrows():
         md.append(f"| {row['Feature']} | {row['Importance_Mean']:.4f} | {row['Importance_Std']:.4f} |\n")
 
-    md.append(f"\n## 五、Calibration（最佳模型）\n\n")
+    md.append(f"\n## 八、Calibration（最佳模型）\n\n")
     md.append(f"- Brier Score (MSE): {calib_stats['brier']:.2f}\n")
     md.append(f"- MAE: {calib_stats['mae']:.2f}\n")
     md.append(f"- RMSE: {calib_stats['rmse']:.2f}\n\n")
 
-    md.append("## 六、可视化\n\n")
+    md.append("## 九、可视化\n\n")
     md.append("![Overview](FIG/SR0530_kimi_v2_Overview.png)\n\n")
     md.append("![Schema Comparison](FIG/SR0530_kimi_v2_SchemaComparison.png)\n\n")
-    md.append("![SHAP Summary](FIG/SR0530_kimi_v2_SHAP_Summary.png)\n\n")
     md.append("![Calibration](FIG/SR0530_kimi_v2_Calibration.png)\n\n")
 
     md.append("---\n\n")
@@ -642,7 +745,7 @@ def get_model_by_name(name):
 def main():
     print("=" * 75)
     print("SR0530 Task 2: ML Optimization (Kimi v2.0)")
-    print("Schemas A/B/C + StratifiedGroupKFold + LOOCV + Bootstrap + SHAP")
+    print("Schemas A1/A2/B/C1 + StratifiedGroupKFold + LOOCV + Bootstrap + Std Coefficients")
     print("=" * 75)
 
     print("\nStep 1: Loading subject mapping...")
@@ -652,9 +755,9 @@ def main():
     all_data = load_distance_data()
     distances = sorted(all_data.keys())
 
-    print("\nStep 3: VIF collinearity diagnosis (Schema C at 1.0 mm)...")
+    print("\nStep 3: VIF collinearity diagnosis (full feature set at 1.0 mm)...")
     df_vif = aggregate_distance(all_data[distances[0]], distances[0], eye_to_subject)
-    vif_df = calc_vif(df_vif, SCHEMA['C_Full_Ridge'])
+    vif_df = calc_vif(df_vif, list(FEATURE_ALL.keys()))
     print(vif_df.to_string(index=False))
 
     print("\nStep 4: Running CV for all configurations...")
@@ -669,6 +772,13 @@ def main():
         df = aggregate_distance(all_data[dist], dist, eye_to_subject)
         distance_dfs[dist] = df
 
+        groups_all = df['Real_Subject_ID'].values
+        n_subjects = len(np.unique(groups_all))
+        n_splits = min(5, n_subjects // 2)
+        if n_splits < 2:
+            print(f"    ⚠️ Warning: only {n_subjects} subjects at distance {dist}, skipping ML for this distance.")
+            continue
+
         for schema_name, feat_short in SCHEMA.items():
             feat_full = [FEATURE_ALL[s] for s in feat_short]
             df_sub = fill_na(df.copy(), feat_full)
@@ -677,9 +787,6 @@ def main():
             y = df_sub[TARGET_COL]
             groups = df_sub['Real_Subject_ID'].values
             y_strat = df_sub['Myopia'].values
-
-            n_subjects = len(np.unique(groups))
-            n_splits = min(5, n_subjects)
 
             print(f"  [{schema_name}] N={len(df_sub)} eyes/{n_subjects} subjects, folds={n_splits}")
 
@@ -794,20 +901,36 @@ def main():
           f"corrected R2={boot_res['bootstrap_r2_corrected']:.3f}, "
           f"optimism={boot_res['bootstrap_optimism']:.3f}")
 
-    print("\nStep 7: SHAP analysis on best model...")
-    shap_df, shap_values, X_s = run_shap(best_model, X_best, y_best, feat_short)
-    print("  SHAP importance:")
-    for _, row in shap_df.iterrows():
-        print(f"    {row['Feature']:<10s}: {row['Mean_SHAP']:.3f}")
+    print("\nStep 7: Standardized coefficient analysis on best model...")
+    coef_results = {}
+    coef_df, _ = run_coefficient_analysis(df_best, feat_short, feat_full, model_name=best_model_name)
+    coef_results[best_schema] = coef_df
+    print("  Standardized coefficients (with Bootstrap 95% CI):")
+    for _, row in coef_df.iterrows():
+        ci_zero = "(includes 0)" if row['CI_Includes_Zero'] else "(excludes 0)"
+        print(f"    {row['Feature']:<10s}: {row['Coef']:.3f} [{row['CI_Lower']:.3f}, {row['CI_Upper']:.3f}] {ci_zero}")
 
-    print("\nStep 8: Permutation importance on best model...")
-    splits = stratified_group_kfold(groups_best, df_best['Myopia'].values, n_splits=min(5, len(np.unique(groups_best))))
-    train_idx, test_idx = splits[0]
-    best_model.fit(X_best.iloc[train_idx], y_best.iloc[train_idx])
-    perm_df = run_permutation_importance(best_model, X_best.iloc[test_idx], y_best.iloc[test_idx], feat_short)
+    print(f"\nStep 8: Lasso supplementary analysis at {best_dist:.1f} mm...")
+    lasso_short = SCHEMA['A2_Biomechanical_NoK']
+    lasso_full = [FEATURE_ALL[s] for s in lasso_short]
+    lasso_df, _ = run_coefficient_analysis(df_best, lasso_short, lasso_full, model_name='Lasso')
+    print("  Lasso coefficients (A2 features):")
+    for _, row in lasso_df.iterrows():
+        print(f"    {row['Feature']:<10s}: {row['Coef']:.3f}")
+
+    print("\nStep 9: Permutation importance on best model...")
+    n_perm_splits = min(5, len(np.unique(groups_best)) // 2)
+    if n_perm_splits >= 2:
+        splits = stratified_group_kfold(groups_best, df_best['Myopia'].values, n_splits=n_perm_splits)
+        train_idx, test_idx = splits[0]
+        best_model.fit(X_best.iloc[train_idx], y_best.iloc[train_idx])
+        perm_df = run_permutation_importance(best_model, X_best.iloc[test_idx], y_best.iloc[test_idx], feat_short)
+    else:
+        best_model.fit(X_best, y_best)
+        perm_df = run_permutation_importance(best_model, X_best, y_best, feat_short)
     print(perm_df.to_string(index=False))
 
-    print("\nStep 9: Calibration plot for best model...")
+    print("\nStep 10: Calibration plot for best model...")
     best_model.fit(X_best, y_best)
     y_pred_calib = best_model.predict(X_best)
     calib_stats = {
@@ -819,20 +942,20 @@ def main():
                      f"Calibration: {best_schema} at {best_dist:.1f} mm ({best_model_name})",
                      os.path.join(OUT_DIR, 'SR0530_kimi_v2_Calibration.png'))
 
-    print("\nStep 10: Generating figures...")
-    plot_overview(ml_results, best_overall)
+    print("\nStep 11: Generating figures...")
+    plot_overview(ml_results, coef_results, best_overall)
     plot_schema_comparison(schema_results)
-    plot_shap_summary(shap_values, X_s, feat_short, best_overall)
 
-    print("\nStep 11: Saving results...")
+    print("\nStep 12: Saving results...")
     df_ml.to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_ML_Results.csv'), index=False, encoding='utf-8-sig')
     pd.DataFrame(schema_results).to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_SchemaBest.csv'),
                                         index=False, encoding='utf-8-sig')
-    shap_df.to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_SHAP.csv'), index=False, encoding='utf-8-sig')
+    coef_df.to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_Coefficients.csv'), index=False, encoding='utf-8-sig')
+    lasso_df.to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_Lasso_Coefficients.csv'), index=False, encoding='utf-8-sig')
     perm_df.to_csv(os.path.join(OUT_DIR, 'SR0530_kimi_v2_PermImportance.csv'), index=False, encoding='utf-8-sig')
 
-    print("\nStep 12: Generating MD report...")
-    generate_md_report(df_ml, pd.DataFrame(schema_results), vif_df, shap_df, perm_df, best_overall, calib_stats)
+    print("\nStep 13: Generating MD report...")
+    generate_md_report(df_ml, pd.DataFrame(schema_results), vif_df, coef_df, lasso_df, perm_df, best_overall, calib_stats)
 
     print("\n" + "=" * 75)
     print("Task 2 complete!")

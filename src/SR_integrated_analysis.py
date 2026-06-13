@@ -34,7 +34,7 @@ warnings.filterwarnings('ignore')
 # 配置
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi')
+DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_strict')
 OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 os.makedirs(OUT_DIR, exist_ok=True)
 REPORT_DIR = os.path.join(BASE_DIR, 'report')
@@ -87,21 +87,21 @@ def load_distance_data():
 
 
 def aggregate_distance(dfs, dist):
-    """对同一距离的4个象限数据，找到共同Subject并计算平均密度"""
-    base = dfs[0][['Subject_ID'] + FEATURE_COLS + [TARGET_COL]].copy()
+    """对同一距离的4个象限数据，按 Subject_ID + Eye 找到共同组合并计算平均密度"""
+    base = dfs[0][['Subject_ID', 'Eye'] + FEATURE_COLS + [TARGET_COL]].copy()
     base = base.rename(columns={TARGET_COL: 'density_q1'})
-    
+
     for i, d in enumerate(dfs[1:], 2):
         base = base.merge(
-            d[['Subject_ID', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
-            on='Subject_ID', how='inner'
+            d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
+            on=['Subject_ID', 'Eye'], how='inner'
         )
-    
+
     den_cols = [c for c in base.columns if c.startswith('density_q')]
     base[TARGET_COL] = base[den_cols].mean(axis=1)
-    
+
     # 保留特征和目标列
-    cols = ['Subject_ID'] + FEATURE_COLS + [TARGET_COL]
+    cols = ['Subject_ID', 'Eye'] + FEATURE_COLS + [TARGET_COL]
     return base[cols].copy()
 
 
@@ -340,7 +340,7 @@ def generate_md_report(ols_results, ml_results, shap_df, best_dist_ols, best_dis
     md.append("# SR0530 整合分析报告：统计筛选 + 多模型机器学习\n")
     md.append("> **分析目标**：在 1.0–6.0 mm 偏心距离范围内，定位视锥细胞密度受眼部参数影响最显著的位置。\n")
     md.append("> **方法**：OLS 回归 + SVM/Random Forest/XGBoost/Neural Network（10-Fold CV）+ SHAP\n")
-    md.append("> **数据**：genData/CleanDataRoi/（44 个 ROI，清洗后数据）\n\n")
+    md.append("> **数据**：genData/CleanDataRoi_strict/（44 个 ROI，严格黑名单策略，69 眼）\n\n")
     
     md.append("---\n\n")
     md.append("## 一、OLS 统计筛选结果\n\n")
