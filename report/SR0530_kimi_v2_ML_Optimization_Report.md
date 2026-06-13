@@ -325,13 +325,13 @@
 
 ## 六、可视化
 
-![Overview](genData/sum/SR0530_kimi_v2_Overview.png)
+![Overview](FIG/SR0530_kimi_v2_Overview.png)
 
-![Schema Comparison](genData/sum/SR0530_kimi_v2_SchemaComparison.png)
+![Schema Comparison](FIG/SR0530_kimi_v2_SchemaComparison.png)
 
-![SHAP Summary](genData/sum/SR0530_kimi_v2_SHAP_Summary.png)
+![SHAP Summary](FIG/SR0530_kimi_v2_SHAP_Summary.png)
 
-![Calibration](genData/sum/SR0530_kimi_v2_Calibration.png)
+![Calibration](FIG/SR0530_kimi_v2_Calibration.png)
 
 ---
 

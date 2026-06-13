@@ -570,7 +570,7 @@ def generate_md_report(ml_results, best_dist, shap_df, importance_results, lmm_b
         md.append(f"| {row['Feature']} | {row['Mean_SHAP']:.3f} |\n")
 
     md.append("\n## 三、特征重要性跨距离热力图\n\n")
-    md.append("见 `genData/sum/SR0530_ML_SubjectAware_FeatureImportance.png`。\n\n")
+    md.append("见 `FIG/SR0530_ML_SubjectAware_FeatureImportance.png`。\n\n")
 
     md.append("## 四、与 LMM 结果对比\n\n")
     md.append(f"- LMM 靶点得分最高距离：**{lmm_best:.1f} mm**（AL 效应最突出）。\n")
@@ -585,9 +585,9 @@ def generate_md_report(ml_results, best_dist, shap_df, importance_results, lmm_b
     md.append("5. **性别、CC、ACD 贡献有限**：多数距离组中，这些参数的 SHAP 重要性低于 AL 和 SE。\n\n")
 
     md.append("## 六、可视化\n\n")
-    md.append("![综合分析看板](genData/sum/SR0530_ML_SubjectAware_Overview.png)\n\n")
-    md.append("![SHAP 详细图](genData/sum/SR0530_ML_SubjectAware_SHAP_Summary.png)\n\n")
-    md.append("![特征重要性热力图](genData/sum/SR0530_ML_SubjectAware_FeatureImportance.png)\n\n")
+    md.append("![综合分析看板](FIG/SR0530_ML_SubjectAware_Overview.png)\n\n")
+    md.append("![SHAP 详细图](FIG/SR0530_ML_SubjectAware_SHAP_Summary.png)\n\n")
+    md.append("![特征重要性热力图](FIG/SR0530_ML_SubjectAware_FeatureImportance.png)\n\n")
 
     md.append("---\n\n")
     md.append("*Report generated automatically by SR_ML_subject_aware.py*\n")

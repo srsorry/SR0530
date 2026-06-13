@@ -150,7 +150,7 @@ OLS 多元线性回归     +      XGBoost 回归
 
 ### 4.1 综合分析看板
 
-![综合分析看板](genData/sum/SR0530_Analysis_Overview_v2.png)
+![综合分析看板](FIG/SR0530_Analysis_Overview_v2.png)
 
 **图注**：
 - **A**：AL 标准化 β 系数随距离变化。红色柱表示 p < 0.05（1.0 mm 和 1.5 mm）。效应峰值在 2.0 mm（β = -0.373）。
@@ -160,7 +160,7 @@ OLS 多元线性回归     +      XGBoost 回归
 
 ### 4.2 SHAP 详细散点图
 
-![SHAP Summary](genData/sum/SR0530_SHAP_Summary_v2.png)
+![SHAP Summary](FIG/SR0530_SHAP_Summary_v2.png)
 
 **图注**：每个点代表一个测试样本。横轴为 SHAP 值（对模型输出的贡献），颜色表示该特征值的高低。可以看出 ACD 和 Age 对密度预测的贡献分散度最大。
 

@@ -37,6 +37,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi')
 OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 os.makedirs(OUT_DIR, exist_ok=True)
+REPORT_DIR = os.path.join(BASE_DIR, 'report')
+FIG_DIR = os.path.join(REPORT_DIR, 'FIG')
+os.makedirs(FIG_DIR, exist_ok=True)
 
 # 注意：RMF (Retinal magnification factor) 与 AL 高度共线，已从特征中移除
 FEATURE_COLS = [
@@ -310,6 +313,7 @@ def plot_results(ols_results, ml_results, shap_df, shap_values, X_test, best_dis
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     fig_path = os.path.join(OUT_DIR, 'SR0530_Integrated_Overview.png')
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
     
@@ -319,6 +323,7 @@ def plot_results(ols_results, ml_results, shap_df, shap_values, X_test, best_dis
     fig2_path = os.path.join(OUT_DIR, 'SR0530_Integrated_SHAP_Summary.png')
     plt.tight_layout()
     plt.savefig(fig2_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig2_path)),dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig2_path}')
 
@@ -369,13 +374,13 @@ def generate_md_report(ols_results, ml_results, shap_df, best_dist_ols, best_dis
     md.append("4. **OLS 与 ML 的最佳距离可能不一致**，这种分歧提示 AL 的效应以线性为主，非线性贡献有限。\n\n")
     
     md.append("## 五、可视化\n\n")
-    md.append("![综合分析看板](genData/sum/SR0530_Integrated_Overview.png)\n\n")
-    md.append("![SHAP 详细图](genData/sum/SR0530_Integrated_SHAP_Summary.png)\n\n")
+    md.append("![综合分析看板](FIG/SR0530_Integrated_Overview.png)\n\n")
+    md.append("![SHAP 详细图](FIG/SR0530_Integrated_SHAP_Summary.png)\n\n")
     
     md.append("---\n\n")
     md.append("*Report generated automatically by SR_integrated_analysis.py*\n")
     
-    md_path = os.path.join(BASE_DIR, 'SR0530_Integrated_Analysis_Report.md')
+    md_path = os.path.join(BASE_DIR, 'report', 'SR0530_Integrated_Analysis_Report.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(''.join(md))
     print(f'  --> Report: {md_path}')

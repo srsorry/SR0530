@@ -151,7 +151,7 @@
 
 ### 5.1 综合分析看板
 
-![综合分析看板](genData/sum/SR0530_Integrated_Overview.png)
+![综合分析看板](FIG/SR0530_Integrated_Overview.png)
 
 **图注**：
 - **A**：AL 标准化 β 随距离变化。所有柱均为正，2.5–3.0 mm 处效应最强。
@@ -161,7 +161,7 @@
 
 ### 5.2 SHAP 详细散点图
 
-![SHAP 详细图](genData/sum/SR0530_Integrated_SHAP_Summary.png)
+![SHAP 详细图](FIG/SR0530_Integrated_SHAP_Summary.png)
 
 ---
 

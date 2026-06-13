@@ -44,6 +44,9 @@ DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi')
 PAIR_PATH = os.path.join(BASE_DIR, 'genData', 'sum', 'Subject_Pair_Mapping.csv')
 OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 os.makedirs(OUT_DIR, exist_ok=True)
+REPORT_DIR = os.path.join(BASE_DIR, 'report')
+FIG_DIR = os.path.join(REPORT_DIR, 'FIG')
+os.makedirs(FIG_DIR, exist_ok=True)
 
 FEATURE_ALL = {
     'AL': 'Axial length (mm)',
@@ -372,6 +375,7 @@ def plot_results(ml_results, schema, shap_results, best_cfg):
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     fig_path = os.path.join(OUT_DIR, 'SR0530_Task2_Overview.png')
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
 
@@ -394,6 +398,7 @@ def plot_schema_comparison(schema_results):
     fig_path = os.path.join(OUT_DIR, 'SR0530_Task2_SchemaComparison.png')
     plt.tight_layout()
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
 
@@ -514,6 +519,7 @@ def main():
     fig_path = os.path.join(OUT_DIR, 'SR0530_Task2_SHAP_Summary.png')
     plt.tight_layout()
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)),dpi=300, bbox_inches='tight')
     plt.close()
     print(f'  --> Saved: {fig_path}')
 
@@ -585,14 +591,14 @@ def generate_md_report(df_ml, df_schema, vif_df, shap_df, best_cfg):
     md.append("4. **SHAP 揭示关键驱动特征**：AL 或 SE 通常是最重要的预测因子，与 LMM 结果相互印证。\n\n")
 
     md.append("## 六、可视化\n\n")
-    md.append("![综合分析](genData/sum/SR0530_Task2_Overview.png)\n\n")
-    md.append("![方案对比](genData/sum/SR0530_Task2_SchemaComparison.png)\n\n")
-    md.append("![SHAP 详细图](genData/sum/SR0530_Task2_SHAP_Summary.png)\n\n")
+    md.append("![综合分析](FIG/SR0530_Task2_Overview.png)\n\n")
+    md.append("![方案对比](FIG/SR0530_Task2_SchemaComparison.png)\n\n")
+    md.append("![SHAP 详细图](FIG/SR0530_Task2_SHAP_Summary.png)\n\n")
 
     md.append("---\n\n")
     md.append("*Report generated automatically by SR_ML_task2.py*\n")
 
-    md_path = os.path.join(BASE_DIR, 'SR0530_Task2_ML_Optimization_Report.md')
+    md_path = os.path.join(BASE_DIR, 'report', 'SR0530_Task2_ML_Optimization_Report.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(''.join(md))
     print(f'  --> Report: {md_path}')

@@ -41,7 +41,7 @@ OES_j = |beta_AL,j*| / max(ICC_j, 0.01) * I(P_FDR,j < 0.05)
 
 ## 四、可视化
 
-![LMM Results](genData/sum/SR0530_LMM_kimi_v2_Results.png)
+![LMM Results](FIG/SR0530_LMM_kimi_v2_Results.png)
 
 ---
 

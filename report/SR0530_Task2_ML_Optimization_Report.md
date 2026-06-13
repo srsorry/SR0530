@@ -209,11 +209,11 @@
 
 ## 六、可视化
 
-![综合分析](genData/sum/SR0530_Task2_Overview.png)
+![综合分析](FIG/SR0530_Task2_Overview.png)
 
-![方案对比](genData/sum/SR0530_Task2_SchemaComparison.png)
+![方案对比](FIG/SR0530_Task2_SchemaComparison.png)
 
-![SHAP 详细图](genData/sum/SR0530_Task2_SHAP_Summary.png)
+![SHAP 详细图](FIG/SR0530_Task2_SHAP_Summary.png)
 
 ---
 

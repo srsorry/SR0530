@@ -34,9 +34,9 @@
 
 ## 三、可视化
 
-![LMM 综合分析](genData/sum/SR0530_LMM_V3.0_Results.png)
+![LMM 综合分析](FIG/SR0530_LMM_V3.0_Results.png)
 
-![Q-Q 残差图](genData/sum/SR0530_LMM_V3.0_QQPlots.png)
+![Q-Q 残差图](FIG/SR0530_LMM_V3.0_QQPlots.png)
 
 ## 四、讨论
 
