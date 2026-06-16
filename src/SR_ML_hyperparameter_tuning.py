@@ -57,6 +57,10 @@ MYOPIA_THRESHOLD = -0.5
 RANDOM_STATE = 42
 N_ITER = 10
 
+# 象限聚合策略
+MIN_QUADRANTS = 1  # 当前运行模式：1 = 放宽为 ≥1 象限平均；4 = 不放宽
+MODE_LABEL = 'q1plus' if MIN_QUADRANTS == 1 else 'q4'
+
 # ============================================================
 # 参数搜索空间
 # ============================================================
@@ -151,25 +155,52 @@ def load_distance_data(data_dir):
     return all_data
 
 
-def aggregate_distance(dfs, eye_to_subject):
-    """按 Subject_ID + Eye 聚合 4 个象限"""
+def aggregate_distance(dfs, eye_to_subject, min_quadrants=4):
+    """
+    按 Subject_ID + Eye 聚合象限密度。
+
+    参数:
+        min_quadrants: 纳入某只眼所需的最少有效象限数。
+                       - 4 = 传统 inner merge，必须 4 个象限完整
+                       - 1 = 只要有 ≥1 个象限即可纳入
+    """
     feature_cols = list(FEATURE_ALL.values())
-    base = dfs[0][['Subject_ID', 'Eye'] + feature_cols + [TARGET_COL]].copy()
-    base = base.rename(columns={TARGET_COL: 'density_q1'})
+
+    # 1. 合并 4 个象限的密度（outer merge 保留所有可用象限）
+    merged = dfs[0][['Subject_ID', 'Eye', TARGET_COL]].copy()
+    merged = merged.rename(columns={TARGET_COL: 'density_q1'})
 
     for i, d in enumerate(dfs[1:], 2):
-        base = base.merge(
+        merged = merged.merge(
             d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
-            on=['Subject_ID', 'Eye'], how='inner'
+            on=['Subject_ID', 'Eye'], how='outer'
         )
 
-    den_cols = [c for c in base.columns if c.startswith('density_q')]
-    base[TARGET_COL] = base[den_cols].mean(axis=1)
+    den_cols = [c for c in merged.columns if c.startswith('density_q')]
+    merged['N_Quadrants'] = merged[den_cols].notna().sum(axis=1)
+    merged[TARGET_COL] = merged[den_cols].mean(axis=1, skipna=True)
 
+    # 2. 按最少象限数过滤
+    if min_quadrants == 4:
+        merged = merged[merged['N_Quadrants'] == 4].copy()
+    else:
+        merged = merged[merged['N_Quadrants'] >= min_quadrants].copy()
+
+    # 3. 从第一个包含该眼的象限提取固定协变量
+    features = None
+    for d in dfs:
+        df_feat = d[['Subject_ID', 'Eye'] + feature_cols].drop_duplicates(['Subject_ID', 'Eye'])
+        if features is None:
+            features = df_feat
+        else:
+            features = pd.concat([features, df_feat], ignore_index=True)
+            features = features.drop_duplicates(['Subject_ID', 'Eye'], keep='first')
+
+    base = merged.merge(features, on=['Subject_ID', 'Eye'], how='left')
     base['Real_Subject_ID'] = base['Subject_ID'].map(eye_to_subject)
     base['Myopia'] = (base[FEATURE_ALL['SE']] <= MYOPIA_THRESHOLD).astype(int)
 
-    return base[['Subject_ID', 'Real_Subject_ID', 'Eye', 'Myopia'] + feature_cols + [TARGET_COL]].copy()
+    return base[['Subject_ID', 'Real_Subject_ID', 'Eye', 'Myopia'] + feature_cols + ['N_Quadrants', TARGET_COL]].copy()
 
 
 def fill_na(df, cols):
@@ -190,32 +221,43 @@ def calc_scores(y_true, y_pred):
 
 
 def group_stratified_kfold(groups, y_stratify, n_splits=5, random_state=42):
-    """按 groups 分组，并在每层内按 y_stratify 分层"""
+    """按 groups 分组，并在每层内按 y_stratify 分层，确保同一 group 不会被拆分到不同 fold。"""
     rng = np.random.RandomState(random_state)
     df_idx = pd.DataFrame({'idx': np.arange(len(groups)), 'group': groups, 'y': y_stratify})
 
-    group_info = df_idx.groupby('group').agg({'y': lambda x: int(x.mode()[0]), 'idx': list}).reset_index()
+    group_info = df_idx.groupby('group').agg(
+        y=('y', lambda x: int(x.mode()[0])),
+        idx=('idx', list)
+    ).reset_index()
     group_info = group_info.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
     pos_groups = group_info[group_info['y'] == 1].copy().reset_index(drop=True)
     neg_groups = group_info[group_info['y'] == 0].copy().reset_index(drop=True)
 
+    # folds 中存储 group 行索引，避免同一 group 被拆分
     folds = [[] for _ in range(n_splits)]
     for label_df in [pos_groups, neg_groups]:
         for i, row in label_df.iterrows():
-            folds[i % n_splits].extend(row['idx'])
+            folds[i % n_splits].append(row.name)
 
-    # 空 fold 保护
+    # 空 fold 保护：从最大 fold 移动一个完整 group
     for i in range(n_splits):
         if not folds[i]:
-            largest_idx = max(range(n_splits), key=lambda k: len(folds[k]))
-            moved = folds[largest_idx].pop()
-            folds[i].append(moved)
+            non_empty = [k for k in range(n_splits) if len(folds[k]) > 0 and k != i]
+            if not non_empty:
+                raise ValueError(f"Cannot fill empty fold {i}: all other folds are empty")
+            largest_idx = max(non_empty, key=lambda k: len(folds[k]))
+            moved_group = folds[largest_idx].pop()
+            folds[i].append(moved_group)
 
     splits = []
     for i in range(n_splits):
-        test_idx = np.array(folds[i])
-        train_idx = np.array([idx for f in folds[:i] + folds[i+1:] for idx in f])
+        test_groups = folds[i]
+        train_groups = [g for f in folds[:i] + folds[i+1:] for g in f]
+        test_idx = np.array([idx for g in test_groups for idx in group_info.loc[g, 'idx']])
+        train_idx = np.array([idx for g in train_groups for idx in group_info.loc[g, 'idx']])
+        if len(test_idx) == 0 or len(train_idx) == 0:
+            raise ValueError(f"Fold {i} has empty train or test set")
         splits.append((train_idx, test_idx))
     return splits
 
@@ -314,6 +356,7 @@ def tune_model(model_name, model_config, X, y, groups, y_stratify, n_iter=10, ra
 def main():
     print("=" * 80)
     print("SR0530 ML Hyperparameter Tuning")
+    print(f"Mode: min_quadrants={MIN_QUADRANTS} ({MODE_LABEL})")
     print("Data groups: strict (69 eyes) vs lenient (71 eyes)")
     print("Distances: 1.0-6.0 mm | Schemas: A1/A2/B/C1 | Models: 7")
     print(f"Random search iterations per model: {N_ITER}")
@@ -333,7 +376,7 @@ def main():
 
         for dist in distances:
             print(f"\n--- Distance {dist:.1f} mm ---")
-            df = aggregate_distance(all_data[dist], eye_to_subject)
+            df = aggregate_distance(all_data[dist], eye_to_subject, min_quadrants=MIN_QUADRANTS)
 
             for schema_name, feat_short in SCHEMA.items():
                 feat_full = [FEATURE_ALL[s] for s in feat_short]
@@ -359,6 +402,9 @@ def main():
                         model_name, model_config, X, y, groups, y_strat,
                         n_iter=N_ITER, random_state=RANDOM_STATE
                     )
+                    if best_metrics is None or best_params is None:
+                        print(f"    -> {model_name}: all iterations failed, skipping")
+                        continue
                     print(f"Best R2={best_metrics['test_r2']:.3f}")
 
                     # 保存最终结果
@@ -392,14 +438,17 @@ def main():
     df_results = pd.DataFrame(results)
     df_trials = pd.DataFrame(all_trials)
 
-    df_results.to_csv(os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results.csv'), index=False, encoding='utf-8-sig')
-    df_trials.to_csv(os.path.join(OUT_DIR, 'SR0530_HP_Tuning_AllTrials.csv'), index=False, encoding='utf-8-sig')
-    print(f"\nSaved: {os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results.csv')}")
-    print(f"Saved: {os.path.join(OUT_DIR, 'SR0530_HP_Tuning_AllTrials.csv')}")
+    results_csv = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Results_{MODE_LABEL}.csv')
+    trials_csv = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_AllTrials_{MODE_LABEL}.csv')
+
+    df_results.to_csv(results_csv, index=False, encoding='utf-8-sig')
+    df_trials.to_csv(trials_csv, index=False, encoding='utf-8-sig')
+    print(f"\nSaved: {results_csv}")
+    print(f"Saved: {trials_csv}")
 
     # 生成可视化和报告
-    generate_visualizations(df_results)
-    generate_report(df_results)
+    generate_visualizations(df_results, mode_label=MODE_LABEL)
+    generate_report(df_results, mode_label=MODE_LABEL)
 
     print("\n" + "=" * 80)
     print("Hyperparameter tuning complete!")
@@ -409,7 +458,7 @@ def main():
 # ============================================================
 # 可视化
 # ============================================================
-def generate_visualizations(df_results):
+def generate_visualizations(df_results, mode_label='q4'):
     """生成参数寻优结果可视化"""
     # 1. 每个数据组的 best Test R2 热图（Distance vs Model，取最佳 Schema）
     for data_group in df_results['Data_Group'].unique():
@@ -425,7 +474,7 @@ def generate_visualizations(df_results):
         ax.set_yticklabels([f"{d:.1f}" for d in pivot.index])
         ax.set_xlabel('Model')
         ax.set_ylabel('Distance (mm)')
-        ax.set_title(f'Best Test R² by Distance and Model ({data_group.upper()} data)')
+        ax.set_title(f'Best Test R² by Distance and Model ({data_group.upper()} data, {mode_label})')
 
         # 在每个格子里标注数值
         for i in range(len(pivot.index)):
@@ -437,7 +486,7 @@ def generate_visualizations(df_results):
 
         fig.colorbar(im, ax=ax, label='Test R²')
         plt.tight_layout()
-        fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Heatmap_{data_group}.png')
+        fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Heatmap_{data_group}_{mode_label}.png')
         plt.savefig(fig_path, dpi=300, bbox_inches='tight')
         plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
         plt.close()
@@ -465,9 +514,9 @@ def generate_visualizations(df_results):
     for idx in range(len(models), len(axes)):
         axes[idx].axis('off')
 
-    plt.suptitle('Strict vs Lenient: Best Test R² by Distance for Each Model', fontsize=14, fontweight='bold')
+    plt.suptitle(f'Strict vs Lenient: Best Test R² by Distance for Each Model ({mode_label})', fontsize=14, fontweight='bold')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig_path = os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Strict_vs_Lenient.png')
+    fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Strict_vs_Lenient_{mode_label}.png')
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
     plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
     plt.close()
@@ -482,11 +531,11 @@ def generate_visualizations(df_results):
     ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
     ax.set_xlabel('Distance (mm)')
     ax.set_ylabel('Best Test R² (across models and data groups)')
-    ax.set_title('Schema Comparison: Best Test R² by Distance')
+    ax.set_title(f'Schema Comparison: Best Test R² by Distance ({mode_label})')
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig_path = os.path.join(OUT_DIR, 'SR0530_HP_Tuning_SchemaComparison.png')
+    fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_SchemaComparison_{mode_label}.png')
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
     plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
     plt.close()
@@ -496,12 +545,18 @@ def generate_visualizations(df_results):
 # ============================================================
 # 报告生成
 # ============================================================
-def generate_report(df_results):
+def generate_report(df_results, mode_label='q4'):
     """生成 Markdown 报告"""
+    mode_desc = {
+        'q4': '≥4 象限完整（不放宽，inner merge）',
+        'q1plus': '≥1 象限可用（放宽，outer merge 取平均）'
+    }.get(mode_label, mode_label)
+
     md = []
-    md.append("# SR0530 ML 超参数寻优报告\n\n")
+    md.append(f"# SR0530 ML 超参数寻优报告（{mode_desc}）\n\n")
     md.append("> **目标**：针对每种 ML 方法，在 strict（69 眼）和 lenient（71 眼）两套数据上做超参数寻优，比较最佳参数与结果。\n\n")
     md.append(f"> **搜索策略**：Random Search + GroupKFold by Subject，每模型 {N_ITER} 组参数\n\n")
+    md.append(f"> **象限策略**：{mode_desc}\n\n")
     md.append("> **数据组**：`CleanDataRoi_strict/`（任意 ROI >7000 剔除）和 `CleanDataRoi_lenient/`（距离平均 >7000 剔除）\n\n")
 
     md.append("---\n\n")
@@ -580,26 +635,26 @@ def generate_report(df_results):
 
     # 七、可视化
     md.append("\n## 七、可视化\n\n")
-    md.append("### Strict 数据组：Distance × Model 热图\n\n")
-    md.append("![Strict Heatmap](FIG/SR0530_HP_Tuning_Heatmap_strict.png)\n\n")
-    md.append("### Lenient 数据组：Distance × Model 热图\n\n")
-    md.append("![Lenient Heatmap](FIG/SR0530_HP_Tuning_Heatmap_lenient.png)\n\n")
-    md.append("### Strict vs Lenient 各模型对比\n\n")
-    md.append("![Strict vs Lenient](FIG/SR0530_HP_Tuning_Strict_vs_Lenient.png)\n\n")
-    md.append("### 方案对比\n\n")
-    md.append("![Schema Comparison](FIG/SR0530_HP_Tuning_SchemaComparison.png)\n\n")
+    md.append(f"### Strict 数据组：Distance × Model 热图 ({mode_label})\n\n")
+    md.append(f"![Strict Heatmap](FIG/SR0530_HP_Tuning_Heatmap_strict_{mode_label}.png)\n\n")
+    md.append(f"### Lenient 数据组：Distance × Model 热图 ({mode_label})\n\n")
+    md.append(f"![Lenient Heatmap](FIG/SR0530_HP_Tuning_Heatmap_lenient_{mode_label}.png)\n\n")
+    md.append(f"### Strict vs Lenient 各模型对比 ({mode_label})\n\n")
+    md.append(f"![Strict vs Lenient](FIG/SR0530_HP_Tuning_Strict_vs_Lenient_{mode_label}.png)\n\n")
+    md.append(f"### 方案对比 ({mode_label})\n\n")
+    md.append(f"![Schema Comparison](FIG/SR0530_HP_Tuning_SchemaComparison_{mode_label}.png)\n\n")
 
     # 八、讨论
     md.append("## 八、讨论\n\n")
     md.append("1. **数据组差异**：strict 模式移除了局部 ROI 异常值，数据更干净；lenient 模式保留了更多样本但可能混入异常。\n")
     md.append("2. **最佳参数稳定性**：如果某模型在 strict 和 lenient 下的最佳参数差异很大，提示该模型对异常值敏感。\n")
-    md.append("3. **方案选择**：A1（AL+Age+Gender）通常最稳健，C1（SE+AL+Age+Gender）可能在小样本中过拟合。\n")
+    md.append("3. **方案选择**：各方案表现因距离和数据组而异，最佳方案需结合 Test R²、Gap 和参数稳定性综合判断，具体见上述结果表。\n")
     md.append("4. **参数寻优局限**：Random Search 的 n_iter=10 是计算与精度的折中，关键模型可进一步增加迭代次数。\n\n")
 
     md.append("---\n\n")
     md.append("*Report generated automatically by SR_ML_hyperparameter_tuning.py*\n")
 
-    md_path = os.path.join(REPORT_DIR, 'SR0530_ML_Hyperparameter_Tuning_Report.md')
+    md_path = os.path.join(REPORT_DIR, f'SR0530_ML_Hyperparameter_Tuning_{mode_label}_Report.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(''.join(md))
     print(f"  --> Report: {md_path}")

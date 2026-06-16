@@ -35,6 +35,7 @@ env/
 .env
 orgData/
 genData/
+backup/
 V6.0/
 # ==========================================
 # 4. matlab: MATLAB 相关

@@ -72,23 +72,51 @@ def load_distance_data(data_dir):
     return all_data
 
 
-def aggregate_distance(dfs, eye_to_subject):
-    """按 Subject_ID + Eye 聚合 4 个象限"""
+def aggregate_distance(dfs, eye_to_subject, min_quadrants=4):
+    """
+    按 Subject_ID + Eye 聚合象限密度。
+
+    参数:
+        min_quadrants: 纳入某只眼所需的最少有效象限数。
+                       - 4 = 传统 inner merge，必须 4 个象限完整（不放宽）
+                       - 1 = 只要有 ≥1 个象限即可纳入（放宽为 ≥1 象限平均）
+    """
     feature_cols = list(FEATURE_ALL.values())
-    base = dfs[0][['Subject_ID', 'Eye'] + feature_cols + [TARGET_COL]].copy()
-    base = base.rename(columns={TARGET_COL: 'density_q1'})
+
+    # 1. 合并 4 个象限的密度（outer merge 保留所有可用象限）
+    merged = dfs[0][['Subject_ID', 'Eye', TARGET_COL]].copy()
+    merged = merged.rename(columns={TARGET_COL: 'density_q1'})
 
     for i, d in enumerate(dfs[1:], 2):
-        base = base.merge(
+        merged = merged.merge(
             d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
-            on=['Subject_ID', 'Eye'], how='inner'
+            on=['Subject_ID', 'Eye'], how='outer'
         )
 
-    den_cols = [c for c in base.columns if c.startswith('density_q')]
-    base[TARGET_COL] = base[den_cols].mean(axis=1)
+    den_cols = [c for c in merged.columns if c.startswith('density_q')]
+    merged['N_Quadrants'] = merged[den_cols].notna().sum(axis=1)
+    merged[TARGET_COL] = merged[den_cols].mean(axis=1, skipna=True)
+
+    # 2. 按最少象限数过滤
+    if min_quadrants == 4:
+        merged = merged[merged['N_Quadrants'] == 4].copy()
+    else:
+        merged = merged[merged['N_Quadrants'] >= min_quadrants].copy()
+
+    # 3. 从第一个包含该眼的象限提取固定协变量（各象限协变量一致）
+    features = None
+    for d in dfs:
+        df_feat = d[['Subject_ID', 'Eye'] + feature_cols].drop_duplicates(['Subject_ID', 'Eye'])
+        if features is None:
+            features = df_feat
+        else:
+            features = pd.concat([features, df_feat], ignore_index=True)
+            features = features.drop_duplicates(['Subject_ID', 'Eye'], keep='first')
+
+    base = merged.merge(features, on=['Subject_ID', 'Eye'], how='left')
     base['Real_Subject_ID'] = base['Subject_ID'].map(eye_to_subject)
 
-    return base[['Subject_ID', 'Real_Subject_ID', 'Eye'] + feature_cols + [TARGET_COL]].copy()
+    return base[['Subject_ID', 'Real_Subject_ID', 'Eye'] + feature_cols + ['N_Quadrants', TARGET_COL]].copy()
 
 
 def fill_na(df, cols):
@@ -254,7 +282,7 @@ def fit_lmm_per_distance(df_agg):
     return df_results, qq_data
 
 
-def prepare_lmm_data(data_group):
+def prepare_lmm_data(data_group, min_quadrants=4):
     """从 CleanDataRoi 准备 LMM 长格式数据"""
     data_dir = DATA_DIRS[data_group]
     eye_to_subject = load_subject_mapping(data_dir)
@@ -262,7 +290,7 @@ def prepare_lmm_data(data_group):
 
     records = []
     for dist, dfs in all_data.items():
-        df = aggregate_distance(dfs, eye_to_subject)
+        df = aggregate_distance(dfs, eye_to_subject, min_quadrants=min_quadrants)
         df['Distance'] = dist
         records.append(df)
 
@@ -335,9 +363,13 @@ def plot_qq(qq_data, out_prefix):
     return os.path.basename(path)
 
 
-def generate_report(df_lmm, df_ml, data_group, figure1_file, qq_file):
+def generate_report(df_lmm, df_ml, data_group, figure1_file, qq_file, mode_label):
     md = []
-    md.append(f"# SR0530 修复版 LMM 分析报告（{data_group.upper()} 数据）\n\n")
+    mode_desc = {
+        'q4': '≥4 象限完整（不放宽，inner merge）',
+        'q1plus': '≥1 象限可用（放宽，outer merge 取平均）'
+    }.get(mode_label, mode_label)
+    md.append(f"# SR0530 修复版 LMM 分析报告（{data_group.upper()} 数据 | {mode_desc}）\n\n")
     md.append("> **目标**：确定 1.0–6.0 mm 偏心率中，视锥细胞密度受眼部参数影响最显著的点。\n\n")
     md.append("> **方法**：每个偏心率独立拟合 LMM，Subject_ID 作为随机效应；OES 公式已调整以避免 ICC 接近 0 时的数值爆炸。\n\n")
     md.append("> **数据**：从 CleanDataRoi 读取，与 ML 层保持一致。\n\n")
@@ -357,13 +389,21 @@ def generate_report(df_lmm, df_ml, data_group, figure1_file, qq_file):
                   f"{row['MAPE']:.2f} | {row['RMSE']:.1f} | {row['ICC']:.3f} | "
                   f"{row['OES_Raw']:.3f} | {row['OES_FDR']:.3f} |\n")
 
-    best_beta = df_lmm.loc[df_lmm['Beta_AL'].abs().idxmax(), 'Distance']
-    best_raw = df_lmm.loc[df_lmm['OES_Raw'].idxmax(), 'Distance']
-    best_fdr = df_lmm.loc[df_lmm['OES_FDR'].idxmax(), 'Distance']
+    # 关键点计算（带 NaN 保护）
+    best_beta = df_lmm.loc[df_lmm['Beta_AL'].abs().idxmax(), 'Distance'] if df_lmm['Beta_AL'].notna().any() else np.nan
+    best_raw = df_lmm.loc[df_lmm['OES_Raw'].idxmax(), 'Distance'] if df_lmm['OES_Raw'].notna().any() else np.nan
+    best_fdr = df_lmm.loc[df_lmm['OES_FDR'].idxmax(), 'Distance'] if df_lmm['OES_FDR'].notna().any() else np.nan
 
-    md.append(f"\n**按 |beta_AL| 最大**：{best_beta:.1f} mm\n")
-    md.append(f"**按 OES_Raw 最高**：{best_raw:.1f} mm\n")
-    md.append(f"**按 OES_FDR 最高**：{best_fdr:.1f} mm（若全为 0，说明 FDR 校正后无显著点）\n\n")
+    md.append(f"\n**按 |beta_AL| 最大**：{best_beta:.1f} mm\n" if pd.notna(best_beta) else "\n**按 |beta_AL| 最大**：无有效结果\n")
+    md.append(f"**按 OES_Raw 最高**：{best_raw:.1f} mm\n" if pd.notna(best_raw) else "**按 OES_Raw 最高**：无有效结果\n")
+    if pd.notna(best_fdr) and df_lmm['OES_FDR'].max() > 0:
+        md.append(f"**按 OES_FDR 最高**：{best_fdr:.1f} mm\n\n")
+    else:
+        md.append("**按 OES_FDR 最高**：FDR 校正后无显著点\n\n")
+
+    # 动态提取未通过 FDR 的距离
+    fdr_fail = df_lmm[(df_lmm['P_FDR'].notna()) & (df_lmm['P_FDR'] >= 0.05)]['Distance'].tolist()
+    fdr_fail_str = ', '.join([f"{d:.1f} mm" for d in fdr_fail]) if fdr_fail else "无"
 
     md.append("## 二、关键指标说明\n\n")
     md.append("- **beta_AL**：AL 的标准化回归系数。\n")
@@ -379,15 +419,15 @@ def generate_report(df_lmm, df_ml, data_group, figure1_file, qq_file):
 
     md.append("## 四、讨论\n\n")
     md.append("1. 本修复版 LMM 从 CleanDataRoi 读取数据，与 ML 层使用完全一致的数据集（Angular cone density，单位 cones/deg²）。\n")
-    md.append("2. **AL 标准化系数为正**：在本数据中，眼轴长度（AL）与角度密度（Angular density）呈正相关。这与基于线性密度（Linear density，cones/mm²）的旧 LMM 结果（AL 系数为负）方向相反。原因是线性密度受视网膜放大因子（RMF）影响，AL 越长视网膜拉伸越严重，单位面积细胞越少；而角度密度经 RMF 校正后，与 AL 的关联方向可能改变。\n")
+    md.append("2. **AL 标准化系数方向**：在本数据中，眼轴长度（AL）与角度密度（Angular density）的关联方向见上表。若需要与线性密度（Linear density，cones/mm²）结果对照，需另行补充 Linear density 的 LMM 分析；两种口径因视网膜放大因子（RMF）校正差异，AL 的系数方向可能不同。\n")
     md.append("3. R² 计算已加入保护性处理，避免方差非正时的数值异常。\n")
-    md.append("4. OES_FDR 作为敏感性分析：当前多数距离通过 FDR 校正，但 2.0 mm、4.5 mm、5.5 mm 等未通过，需在论文中谨慎解读。\n")
-    md.append("5. LMM 效应最敏感点（3.0 mm，|beta_AL| 最大）与 ML 最佳预测点（lenient 3.0 mm）高度一致，为最终靶点选择提供了双重证据。\n\n")
+    md.append(f"4. OES_FDR 作为敏感性分析：未通过 FDR 校正的距离为 {fdr_fail_str}。对这些距离的结果需谨慎解读。\n")
+    md.append(f"5. LMM 效应最敏感点（按 |beta_AL| 最大）位于 **{best_beta:.1f} mm**，为靶点选择提供了 LMM 层面的证据。\n\n")
 
     md.append("---\n\n")
     md.append("*Report generated by SR_LMM_revised.py*\n")
 
-    md_path = os.path.join(REPORT_DIR, f'SR0530_LMM_Revised_{data_group}_Report.md')
+    md_path = os.path.join(REPORT_DIR, f'SR0530_LMM_Revised_{data_group}_{mode_label}_Report.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(''.join(md))
     print(f"  --> Report: {md_path}")
@@ -398,35 +438,45 @@ def main():
     print("SR0530 Revised LMM Analysis")
     print("=" * 80)
 
-    # 读取 ML 结果用于 Figure 1
-    ml_results = pd.read_csv(os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results.csv'))
+    # 读取 ML q1plus 结果用于 Figure 1
+    ml_results = pd.read_csv(os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results_q1plus.csv'))
+
+    # 只保留 q1plus 模式
+    mode_label = 'q1plus'
+    mode_desc = '放宽：≥1 个象限可用即纳入'
+    min_q = 1
+
+    print(f"\n{'='*80}")
+    print(f"MODE: {mode_desc} (min_quadrants={min_q})")
+    print(f"{'='*80}")
 
     for data_group in ['strict', 'lenient']:
         print(f"\n{'='*80}")
         print(f"Processing {data_group.upper()} data")
         print(f"{'='*80}")
 
-        df_agg = prepare_lmm_data(data_group)
+        df_agg = prepare_lmm_data(data_group, min_quadrants=min_q)
         print(f"  Total records: {len(df_agg)}")
         print(f"  Distances: {sorted(df_agg['Distance'].unique())}")
         print(f"  Subjects: {df_agg['Real_Subject_ID'].nunique()}")
         print(f"  Eyes: {df_agg['Subject_ID'].nunique()}")
+        print(f"  Quadrant policy: min={min_q}, mean available quadrants per record = {df_agg['N_Quadrants'].mean():.2f}")
 
         print("\n  Fitting LMM per distance...")
         df_lmm, qq_data = fit_lmm_per_distance(df_agg)
 
         # 保存 CSV
-        csv_path = os.path.join(OUT_DIR, f'SR0530_LMM_Revised_{data_group}_Results.csv')
+        csv_path = os.path.join(OUT_DIR, f'SR0530_LMM_Revised_{data_group}_{mode_label}_Results.csv')
         df_lmm.to_csv(csv_path, index=False, encoding='utf-8-sig')
         print(f"  --> CSV: {csv_path}")
 
         # 生成图
         df_ml_g = ml_results[ml_results['Data_Group'] == data_group]
-        figure1_file = plot_figure1(df_lmm, df_ml_g, data_group, f'SR0530_{data_group}')
-        qq_file = plot_qq(qq_data, f'SR0530_{data_group}')
+        figure1_file = plot_figure1(df_lmm, df_ml_g, data_group, f'SR0530_{data_group}_{mode_label}')
+        qq_file = plot_qq(qq_data, f'SR0530_{data_group}_{mode_label}')
 
         # 生成报告
-        generate_report(df_lmm, df_ml_g, data_group, figure1_file, qq_file)
+        generate_report(df_lmm, df_ml_g, data_group, figure1_file, qq_file, mode_label)
 
     print("\n" + "=" * 80)
     print("Revised LMM analysis complete!")
