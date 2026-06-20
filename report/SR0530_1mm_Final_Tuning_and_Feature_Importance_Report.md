@@ -8,166 +8,167 @@
 
 ## 一、总体最佳配置
 
-- **数据组**：lenient
+- **数据组**：strict
 - **方案**：C1_Combined
-- **模型**：Ridge
-- **Fine Test R^2**：0.365
-- **Bootstrap R^2**：0.175 ± 0.161 [95% CI: -0.271, 0.387]
-- **Train R^2 / Gap**：0.415 / 0.049
-- **MAPE / RMSE**：11.22% / 555.6
-- **样本量**：71 眼 / 46 subjects
-- **最佳参数**：`{'alpha': 30.0}`
+- **模型**：Neural_Network
+- **Fine Test R^2**：0.340 [95% CI: 0.259, 0.420]
+- **Bootstrap R^2**：0.069 ± 0.239 [95% CI: -0.461, 0.360]
+- **Train R^2 / Gap**：0.601 / 0.261
+- **MAPE / RMSE**：10.31% / 472.9 [95% CI: 358.0, 587.8]
+- **样本量**：69 眼 / 44 subjects
+- **最佳参数**：`{'hidden_layer_sizes': (120, 60), 'alpha': 2.0, 'learning_rate_init': 0.00075}`
 
 ## 二、全部配置精细调优结果
 
-| 数据组 | 方案 | 模型 | Coarse R^2 | Fine R^2 | Train R^2 | Gap | MAPE | RMSE | Bootstrap Mean±Std | 95% CI |
-|--------|------|------|-----------|---------|----------|-----|------|------|--------------------|--------|
-| lenient | A2_Biomechanical_NoK | Random_Forest | 0.452 | 0.445 | 0.757 | 0.312 | 9.49 | 474.4 | 0.043 ± 0.258 | [-0.572, 0.375] |
-| lenient | A1_Biomechanical_Core | Random_Forest | 0.438 | 0.424 | 0.721 | 0.297 | 9.57 | 492.9 | 0.076 ± 0.228 | [-0.454, 0.397] |
-| lenient | C1_Combined | Random_Forest | 0.417 | 0.526 | 0.782 | 0.255 | 10.46 | 494.7 | 0.068 ± 0.230 | [-0.413, 0.379] |
-| strict | B_Clinical | Neural_Network | 0.360 | 0.300 | 0.610 | 0.310 | 9.29 | 447.0 | -0.231 ± 0.369 | [-1.149, 0.261] |
-| lenient | C1_Combined | Neural_Network | 0.342 | 0.507 | 0.666 | 0.159 | 10.94 | 530.3 | 0.107 ± 0.173 | [-0.366, 0.365] |
-| lenient | C1_Combined | XGBoost | 0.341 | 0.386 | 0.804 | 0.418 | 11.62 | 583.2 | 0.097 ± 0.212 | [-0.463, 0.442] |
-| lenient | C1_Combined | Ridge | 0.330 | 0.365 | 0.415 | 0.049 | 11.22 | 555.6 | 0.175 ± 0.161 | [-0.271, 0.387] |
-| strict | A1_Biomechanical_Core | XGBoost | 0.322 | 0.350 | 0.715 | 0.365 | 12.42 | 538.4 | 0.065 ± 0.244 | [-0.569, 0.351] |
-| lenient | C1_Combined | SVM | 0.319 | 0.396 | 0.755 | 0.359 | 11.45 | 553.7 | -0.096 ± 0.310 | [-0.787, 0.292] |
-| lenient | C1_Combined | Lasso | 0.313 | 0.423 | 0.561 | 0.138 | 9.88 | 516.3 | -0.130 ± 0.484 | [-1.531, 0.362] |
-| lenient | C1_Combined | ElasticNet | 0.306 | 0.519 | 0.565 | 0.046 | 10.74 | 531.6 | 0.160 ± 0.182 | [-0.321, 0.391] |
-| lenient | A1_Biomechanical_Core | XGBoost | 0.302 | 0.367 | 0.719 | 0.352 | 12.23 | 556.6 | 0.137 ± 0.189 | [-0.245, 0.445] |
+| 数据组 | 方案 | 模型 | Coarse R^2 | Fine R^2 (95% CI) | Train R^2 | Gap | MAPE | RMSE (95% CI) | Bootstrap R^2 Mean±Std | Bootstrap 95% CI |
+|--------|------|------|-----------|-------------------|----------|-----|------|----------------|------------------------|------------------|
+| strict | A1_Biomechanical_Core | Lasso | 0.499 | 0.499 [0.292, 0.707] | 0.552 | 0.053 | 8.51 | 391.2 [271.5, 510.8] | -0.111 ± 0.316 | [-0.794, 0.281] |
+| strict | A1_Biomechanical_Core | Ridge | 0.499 | 0.398 [0.160, 0.637] | 0.517 | 0.118 | 9.79 | 437.3 [337.6, 537.1] | -0.110 ± 0.315 | [-0.790, 0.282] |
+| strict | A2_Biomechanical_NoK | Ridge | 0.492 | 0.380 [0.046, 0.713] | 0.619 | 0.239 | 10.48 | 501.8 [254.6, 748.9] | -0.476 ± 0.589 | [-1.606, 0.260] |
+| strict | A2_Biomechanical_NoK | Lasso | 0.491 | 0.427 [0.268, 0.586] | 0.557 | 0.130 | 9.47 | 437.5 [326.0, 549.0] | -0.483 ± 0.596 | [-1.623, 0.261] |
+| strict | A1_Biomechanical_Core | ElasticNet | 0.476 | 0.478 [0.224, 0.732] | 0.563 | 0.085 | 10.15 | 434.4 [252.0, 616.8] | -0.111 ± 0.316 | [-0.794, 0.281] |
+| strict | C1_Combined | ElasticNet | 0.467 | 0.391 [0.054, 0.728] | 0.560 | 0.169 | 10.58 | 483.5 [334.3, 632.8] | -0.174 ± 0.504 | [-1.706, 0.299] |
+| strict | C1_Combined | Ridge | 0.467 | 0.394 [0.164, 0.625] | 0.646 | 0.251 | 10.27 | 489.5 [387.1, 591.9] | -0.177 ± 0.507 | [-1.713, 0.299] |
+| strict | C1_Combined | Lasso | 0.467 | 0.346 [-0.073, 0.766] | 0.596 | 0.250 | 8.72 | 388.4 [315.4, 461.3] | -0.178 ± 0.508 | [-1.716, 0.299] |
+| lenient | A1_Biomechanical_Core | SVM | 0.458 | 0.491 [0.307, 0.675] | 0.657 | 0.165 | 10.18 | 530.0 [235.0, 825.1] | 0.063 ± 0.205 | [-0.351, 0.390] |
+| strict | C1_Combined | Neural_Network | 0.457 | 0.340 [0.259, 0.420] | 0.601 | 0.261 | 10.31 | 472.9 [358.0, 587.8] | 0.069 ± 0.239 | [-0.461, 0.360] |
+| strict | A2_Biomechanical_NoK | ElasticNet | 0.453 | 0.339 [0.056, 0.622] | 0.495 | 0.156 | 12.13 | 551.9 [288.6, 815.2] | -0.483 ± 0.596 | [-1.623, 0.261] |
+| lenient | A1_Biomechanical_Core | XGBoost | 0.451 | 0.452 [0.179, 0.725] | 0.877 | 0.425 | 11.92 | 562.7 [466.9, 658.6] | 0.014 ± 0.242 | [-0.596, 0.428] |
 
 ## 三、特征重要性汇总
 
 | 数据组 | 方案 | 模型 | 方法 | 排名 | 特征 | 重要性 |
 |--------|------|------|------|------|------|--------|
-| lenient | A1_Biomechanical_Core | Random_Forest | Builtin | 1 | Axial length (mm) | 0.8537 |
-| lenient | A1_Biomechanical_Core | Random_Forest | Builtin | 2 | Age | 0.1055 |
-| lenient | A1_Biomechanical_Core | Random_Forest | Builtin | 3 | Gender | 0.0408 |
-| lenient | A1_Biomechanical_Core | Random_Forest | Permutation | 1 | Axial length (mm) | 1.2035 |
-| lenient | A1_Biomechanical_Core | Random_Forest | Permutation | 2 | Age | 0.1065 |
-| lenient | A1_Biomechanical_Core | Random_Forest | Permutation | 3 | Gender | 0.0394 |
-| lenient | A1_Biomechanical_Core | Random_Forest | SHAP | 1 | Axial length (mm) | 438.8618 |
-| lenient | A1_Biomechanical_Core | Random_Forest | SHAP | 2 | Age | 99.4949 |
-| lenient | A1_Biomechanical_Core | Random_Forest | SHAP | 3 | Gender | 21.3018 |
-| lenient | A1_Biomechanical_Core | XGBoost | Builtin | 1 | Axial length (mm) | 0.7697 |
-| lenient | A1_Biomechanical_Core | XGBoost | Builtin | 2 | Age | 0.2303 |
+| lenient | A1_Biomechanical_Core | SVM | Permutation | 1 | Axial length (mm) | 0.9053 |
+| lenient | A1_Biomechanical_Core | SVM | Permutation | 2 | Age | -0.0304 |
+| lenient | A1_Biomechanical_Core | SVM | Permutation | 3 | Gender | -0.0569 |
+| lenient | A1_Biomechanical_Core | SVM | SHAP | 1 | Axial length (mm) | 417.4223 |
+| lenient | A1_Biomechanical_Core | SVM | SHAP | 2 | Age | 106.6150 |
+| lenient | A1_Biomechanical_Core | SVM | SHAP | 3 | Gender | 76.7928 |
+| lenient | A1_Biomechanical_Core | XGBoost | Builtin | 1 | Axial length (mm) | 0.7097 |
+| lenient | A1_Biomechanical_Core | XGBoost | Builtin | 2 | Age | 0.2903 |
 | lenient | A1_Biomechanical_Core | XGBoost | Builtin | 3 | Gender | 0.0000 |
-| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 1 | Axial length (mm) | 1.0498 |
-| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 2 | Age | 0.1075 |
-| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 3 | Gender | 0.0000 |
-| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 1 | Axial length (mm) | 390.2881 |
-| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 2 | Age | 118.9194 |
-| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 3 | Gender | 0.0000 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Builtin | 1 | Axial length (mm) | 0.7413 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Builtin | 2 | Anterior chamber depth (mm) | 0.1457 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Builtin | 3 | Age | 0.0823 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Builtin | 4 | Gender | 0.0308 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Permutation | 1 | Axial length (mm) | 1.2357 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Permutation | 2 | Anterior chamber depth (mm) | 0.1426 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Permutation | 3 | Age | 0.0893 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | Permutation | 4 | Gender | 0.0266 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | SHAP | 1 | Axial length (mm) | 427.6566 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | SHAP | 2 | Anterior chamber depth (mm) | 76.8904 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | SHAP | 3 | Age | 74.8085 |
-| lenient | A2_Biomechanical_NoK | Random_Forest | SHAP | 4 | Gender | 15.3284 |
-| lenient | C1_Combined | ElasticNet | Builtin | 1 | Axial length (mm) | 294.8990 |
-| lenient | C1_Combined | ElasticNet | Builtin | 2 | Spherical equivalent refraction (D) | 198.4297 |
-| lenient | C1_Combined | ElasticNet | Builtin | 3 | Age | 34.5648 |
-| lenient | C1_Combined | ElasticNet | Builtin | 4 | Gender | 33.9315 |
-| lenient | C1_Combined | ElasticNet | Permutation | 1 | Axial length (mm) | 0.4266 |
-| lenient | C1_Combined | ElasticNet | Permutation | 2 | Spherical equivalent refraction (D) | 0.1790 |
-| lenient | C1_Combined | ElasticNet | Permutation | 3 | Gender | 0.0073 |
-| lenient | C1_Combined | ElasticNet | Permutation | 4 | Age | 0.0046 |
-| lenient | C1_Combined | ElasticNet | SHAP | 1 | Axial length (mm) | 235.6117 |
-| lenient | C1_Combined | ElasticNet | SHAP | 2 | Spherical equivalent refraction (D) | 151.3958 |
-| lenient | C1_Combined | ElasticNet | SHAP | 3 | Gender | 33.3578 |
-| lenient | C1_Combined | ElasticNet | SHAP | 4 | Age | 27.1719 |
-| lenient | C1_Combined | Lasso | Builtin | 1 | Axial length (mm) | 397.5133 |
-| lenient | C1_Combined | Lasso | Builtin | 2 | Spherical equivalent refraction (D) | 240.2616 |
-| lenient | C1_Combined | Lasso | Builtin | 3 | Age | 70.6862 |
-| lenient | C1_Combined | Lasso | Builtin | 4 | Gender | 50.1447 |
-| lenient | C1_Combined | Lasso | Permutation | 1 | Axial length (mm) | 0.5604 |
-| lenient | C1_Combined | Lasso | Permutation | 2 | Spherical equivalent refraction (D) | 0.1903 |
-| lenient | C1_Combined | Lasso | Permutation | 3 | Age | 0.0149 |
-| lenient | C1_Combined | Lasso | Permutation | 4 | Gender | 0.0118 |
-| lenient | C1_Combined | Lasso | SHAP | 1 | Axial length (mm) | 317.5961 |
-| lenient | C1_Combined | Lasso | SHAP | 2 | Spherical equivalent refraction (D) | 183.3122 |
-| lenient | C1_Combined | Lasso | SHAP | 3 | Age | 55.5674 |
-| lenient | C1_Combined | Lasso | SHAP | 4 | Gender | 49.2970 |
-| lenient | C1_Combined | Neural_Network | Permutation | 1 | Axial length (mm) | 0.0011 |
-| lenient | C1_Combined | Neural_Network | Permutation | 2 | Spherical equivalent refraction (D) | 0.0003 |
-| lenient | C1_Combined | Neural_Network | Permutation | 3 | Age | 0.0002 |
-| lenient | C1_Combined | Neural_Network | Permutation | 4 | Gender | -0.0002 |
-| lenient | C1_Combined | Neural_Network | SHAP | 1 | Axial length (mm) | 0.3354 |
-| lenient | C1_Combined | Neural_Network | SHAP | 2 | Spherical equivalent refraction (D) | 0.1359 |
-| lenient | C1_Combined | Neural_Network | SHAP | 3 | Gender | 0.0637 |
-| lenient | C1_Combined | Neural_Network | SHAP | 4 | Age | 0.0438 |
-| lenient | C1_Combined | Random_Forest | Builtin | 1 | Axial length (mm) | 0.5960 |
-| lenient | C1_Combined | Random_Forest | Builtin | 2 | Spherical equivalent refraction (D) | 0.3229 |
-| lenient | C1_Combined | Random_Forest | Builtin | 3 | Age | 0.0622 |
-| lenient | C1_Combined | Random_Forest | Builtin | 4 | Gender | 0.0189 |
-| lenient | C1_Combined | Random_Forest | Permutation | 1 | Axial length (mm) | 0.6345 |
-| lenient | C1_Combined | Random_Forest | Permutation | 2 | Spherical equivalent refraction (D) | 0.2299 |
-| lenient | C1_Combined | Random_Forest | Permutation | 3 | Age | 0.0505 |
-| lenient | C1_Combined | Random_Forest | Permutation | 4 | Gender | 0.0169 |
-| lenient | C1_Combined | Random_Forest | SHAP | 1 | Axial length (mm) | 303.3712 |
-| lenient | C1_Combined | Random_Forest | SHAP | 2 | Spherical equivalent refraction (D) | 190.8733 |
-| lenient | C1_Combined | Random_Forest | SHAP | 3 | Age | 52.3134 |
-| lenient | C1_Combined | Random_Forest | SHAP | 4 | Gender | 13.3671 |
-| lenient | C1_Combined | Ridge | Builtin | 1 | Axial length (mm) | 286.0447 |
-| lenient | C1_Combined | Ridge | Builtin | 2 | Spherical equivalent refraction (D) | 194.0466 |
-| lenient | C1_Combined | Ridge | Builtin | 3 | Gender | 32.8093 |
-| lenient | C1_Combined | Ridge | Builtin | 4 | Age | 32.2058 |
-| lenient | C1_Combined | Ridge | Permutation | 1 | Axial length (mm) | 0.4152 |
-| lenient | C1_Combined | Ridge | Permutation | 2 | Spherical equivalent refraction (D) | 0.1770 |
-| lenient | C1_Combined | Ridge | Permutation | 3 | Gender | 0.0070 |
-| lenient | C1_Combined | Ridge | Permutation | 4 | Age | 0.0040 |
-| lenient | C1_Combined | Ridge | SHAP | 1 | Axial length (mm) | 228.5375 |
-| lenient | C1_Combined | Ridge | SHAP | 2 | Spherical equivalent refraction (D) | 148.0516 |
-| lenient | C1_Combined | Ridge | SHAP | 3 | Gender | 32.2546 |
-| lenient | C1_Combined | Ridge | SHAP | 4 | Age | 25.3174 |
-| lenient | C1_Combined | SVM | Permutation | 1 | Axial length (mm) | 0.4091 |
-| lenient | C1_Combined | SVM | Permutation | 2 | Spherical equivalent refraction (D) | 0.3714 |
-| lenient | C1_Combined | SVM | Permutation | 3 | Gender | 0.1766 |
-| lenient | C1_Combined | SVM | Permutation | 4 | Age | 0.1612 |
-| lenient | C1_Combined | SVM | SHAP | 1 | Axial length (mm) | 238.0877 |
-| lenient | C1_Combined | SVM | SHAP | 2 | Spherical equivalent refraction (D) | 196.0273 |
-| lenient | C1_Combined | SVM | SHAP | 3 | Age | 102.0926 |
-| lenient | C1_Combined | SVM | SHAP | 4 | Gender | 85.6232 |
-| lenient | C1_Combined | XGBoost | Builtin | 1 | Axial length (mm) | 0.4717 |
-| lenient | C1_Combined | XGBoost | Builtin | 2 | Spherical equivalent refraction (D) | 0.2343 |
-| lenient | C1_Combined | XGBoost | Builtin | 3 | Age | 0.1812 |
-| lenient | C1_Combined | XGBoost | Builtin | 4 | Gender | 0.1128 |
-| lenient | C1_Combined | XGBoost | Permutation | 1 | Axial length (mm) | 0.5513 |
-| lenient | C1_Combined | XGBoost | Permutation | 2 | Spherical equivalent refraction (D) | 0.2601 |
-| lenient | C1_Combined | XGBoost | Permutation | 3 | Gender | 0.0578 |
-| lenient | C1_Combined | XGBoost | Permutation | 4 | Age | 0.0518 |
-| lenient | C1_Combined | XGBoost | SHAP | 1 | Axial length (mm) | 263.4713 |
-| lenient | C1_Combined | XGBoost | SHAP | 2 | Spherical equivalent refraction (D) | 189.6319 |
-| lenient | C1_Combined | XGBoost | SHAP | 3 | Age | 47.2026 |
-| lenient | C1_Combined | XGBoost | SHAP | 4 | Gender | 34.1285 |
-| strict | A1_Biomechanical_Core | XGBoost | Builtin | 1 | Axial length (mm) | 0.8305 |
-| strict | A1_Biomechanical_Core | XGBoost | Builtin | 2 | Age | 0.1695 |
-| strict | A1_Biomechanical_Core | XGBoost | Builtin | 3 | Gender | 0.0000 |
-| strict | A1_Biomechanical_Core | XGBoost | Permutation | 1 | Axial length (mm) | 1.1260 |
-| strict | A1_Biomechanical_Core | XGBoost | Permutation | 2 | Age | 0.1299 |
-| strict | A1_Biomechanical_Core | XGBoost | Permutation | 3 | Gender | 0.0000 |
-| strict | A1_Biomechanical_Core | XGBoost | SHAP | 1 | Axial length (mm) | 384.3961 |
-| strict | A1_Biomechanical_Core | XGBoost | SHAP | 2 | Age | 123.9354 |
-| strict | A1_Biomechanical_Core | XGBoost | SHAP | 3 | Gender | 0.0000 |
-| strict | B_Clinical | Neural_Network | Permutation | 1 | Spherical equivalent refraction (D) | 0.0009 |
-| strict | B_Clinical | Neural_Network | Permutation | 2 | Age | -0.0002 |
-| strict | B_Clinical | Neural_Network | Permutation | 3 | Gender | -0.0002 |
-| strict | B_Clinical | Neural_Network | SHAP | 1 | Spherical equivalent refraction (D) | 0.4116 |
-| strict | B_Clinical | Neural_Network | SHAP | 2 | Gender | 0.0827 |
-| strict | B_Clinical | Neural_Network | SHAP | 3 | Age | 0.0336 |
+| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 1 | Axial length (mm) | 1.0758 |
+| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 2 | Age | 0.0688 |
+| lenient | A1_Biomechanical_Core | XGBoost | Permutation | 3 | Gender | -0.0123 |
+| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 1 | Axial length (mm) | 478.6986 |
+| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 2 | Age | 135.3012 |
+| lenient | A1_Biomechanical_Core | XGBoost | SHAP | 3 | Gender | 12.7485 |
+| strict | A1_Biomechanical_Core | ElasticNet | Builtin | 1 | Axial length (mm) | 429.8772 |
+| strict | A1_Biomechanical_Core | ElasticNet | Builtin | 2 | Age | 52.0788 |
+| strict | A1_Biomechanical_Core | ElasticNet | Builtin | 3 | Gender | 9.9653 |
+| strict | A1_Biomechanical_Core | ElasticNet | Permutation | 1 | Axial length (mm) | 0.8419 |
+| strict | A1_Biomechanical_Core | ElasticNet | Permutation | 2 | Gender | -0.0043 |
+| strict | A1_Biomechanical_Core | ElasticNet | Permutation | 3 | Age | -0.0354 |
+| strict | A1_Biomechanical_Core | ElasticNet | SHAP | 1 | Axial length (mm) | 284.9775 |
+| strict | A1_Biomechanical_Core | ElasticNet | SHAP | 2 | Gender | 22.2928 |
+| strict | A1_Biomechanical_Core | ElasticNet | SHAP | 3 | Age | 20.8386 |
+| strict | A1_Biomechanical_Core | Lasso | Builtin | 1 | Axial length (mm) | 429.8995 |
+| strict | A1_Biomechanical_Core | Lasso | Builtin | 2 | Age | 52.0860 |
+| strict | A1_Biomechanical_Core | Lasso | Builtin | 3 | Gender | 9.9648 |
+| strict | A1_Biomechanical_Core | Lasso | Permutation | 1 | Axial length (mm) | 0.8420 |
+| strict | A1_Biomechanical_Core | Lasso | Permutation | 2 | Gender | -0.0043 |
+| strict | A1_Biomechanical_Core | Lasso | Permutation | 3 | Age | -0.0354 |
+| strict | A1_Biomechanical_Core | Lasso | SHAP | 1 | Axial length (mm) | 284.9933 |
+| strict | A1_Biomechanical_Core | Lasso | SHAP | 2 | Gender | 22.2940 |
+| strict | A1_Biomechanical_Core | Lasso | SHAP | 3 | Age | 20.8378 |
+| strict | A1_Biomechanical_Core | Ridge | Builtin | 1 | Axial length (mm) | 429.3890 |
+| strict | A1_Biomechanical_Core | Ridge | Builtin | 2 | Age | 51.9049 |
+| strict | A1_Biomechanical_Core | Ridge | Builtin | 3 | Gender | 9.9583 |
+| strict | A1_Biomechanical_Core | Ridge | Permutation | 1 | Axial length (mm) | 0.8405 |
+| strict | A1_Biomechanical_Core | Ridge | Permutation | 2 | Gender | -0.0042 |
+| strict | A1_Biomechanical_Core | Ridge | Permutation | 3 | Age | -0.0355 |
+| strict | A1_Biomechanical_Core | Ridge | SHAP | 1 | Axial length (mm) | 284.5429 |
+| strict | A1_Biomechanical_Core | Ridge | SHAP | 2 | Gender | 22.2353 |
+| strict | A1_Biomechanical_Core | Ridge | SHAP | 3 | Age | 20.8391 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Builtin | 1 | Axial length (mm) | 431.3657 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Builtin | 2 | Age | 63.4343 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Builtin | 3 | Anterior chamber depth (mm) | 42.2760 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Builtin | 4 | Gender | 15.7245 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Permutation | 1 | Axial length (mm) | 1.0517 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Permutation | 2 | Age | -0.0194 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Permutation | 3 | Gender | -0.0550 |
+| strict | A2_Biomechanical_NoK | ElasticNet | Permutation | 4 | Anterior chamber depth (mm) | -0.4490 |
+| strict | A2_Biomechanical_NoK | ElasticNet | SHAP | 1 | Axial length (mm) | 278.4598 |
+| strict | A2_Biomechanical_NoK | ElasticNet | SHAP | 2 | Anterior chamber depth (mm) | 180.6723 |
+| strict | A2_Biomechanical_NoK | ElasticNet | SHAP | 3 | Age | 37.6404 |
+| strict | A2_Biomechanical_NoK | ElasticNet | SHAP | 4 | Gender | 37.0826 |
+| strict | A2_Biomechanical_NoK | Lasso | Builtin | 1 | Axial length (mm) | 431.3732 |
+| strict | A2_Biomechanical_NoK | Lasso | Builtin | 2 | Age | 63.4320 |
+| strict | A2_Biomechanical_NoK | Lasso | Builtin | 3 | Anterior chamber depth (mm) | 42.2707 |
+| strict | A2_Biomechanical_NoK | Lasso | Builtin | 4 | Gender | 15.7194 |
+| strict | A2_Biomechanical_NoK | Lasso | Permutation | 1 | Axial length (mm) | 1.0517 |
+| strict | A2_Biomechanical_NoK | Lasso | Permutation | 2 | Age | -0.0194 |
+| strict | A2_Biomechanical_NoK | Lasso | Permutation | 3 | Gender | -0.0550 |
+| strict | A2_Biomechanical_NoK | Lasso | Permutation | 4 | Anterior chamber depth (mm) | -0.4490 |
+| strict | A2_Biomechanical_NoK | Lasso | SHAP | 1 | Axial length (mm) | 278.4651 |
+| strict | A2_Biomechanical_NoK | Lasso | SHAP | 2 | Anterior chamber depth (mm) | 180.6710 |
+| strict | A2_Biomechanical_NoK | Lasso | SHAP | 3 | Age | 37.6380 |
+| strict | A2_Biomechanical_NoK | Lasso | SHAP | 4 | Gender | 37.0793 |
+| strict | A2_Biomechanical_NoK | Ridge | Builtin | 1 | Axial length (mm) | 429.9966 |
+| strict | A2_Biomechanical_NoK | Ridge | Builtin | 2 | Age | 62.8557 |
+| strict | A2_Biomechanical_NoK | Ridge | Builtin | 3 | Anterior chamber depth (mm) | 42.0360 |
+| strict | A2_Biomechanical_NoK | Ridge | Builtin | 4 | Gender | 15.6575 |
+| strict | A2_Biomechanical_NoK | Ridge | Permutation | 1 | Axial length (mm) | 1.0458 |
+| strict | A2_Biomechanical_NoK | Ridge | Permutation | 2 | Age | -0.0199 |
+| strict | A2_Biomechanical_NoK | Ridge | Permutation | 3 | Gender | -0.0539 |
+| strict | A2_Biomechanical_NoK | Ridge | Permutation | 4 | Anterior chamber depth (mm) | -0.4461 |
+| strict | A2_Biomechanical_NoK | Ridge | SHAP | 1 | Axial length (mm) | 277.3107 |
+| strict | A2_Biomechanical_NoK | Ridge | SHAP | 2 | Anterior chamber depth (mm) | 179.5462 |
+| strict | A2_Biomechanical_NoK | Ridge | SHAP | 3 | Age | 37.1329 |
+| strict | A2_Biomechanical_NoK | Ridge | SHAP | 4 | Gender | 36.6425 |
+| strict | C1_Combined | ElasticNet | Builtin | 1 | Axial length (mm) | 378.4319 |
+| strict | C1_Combined | ElasticNet | Builtin | 2 | Spherical equivalent refraction (D) | 195.1238 |
+| strict | C1_Combined | ElasticNet | Builtin | 3 | Age | 60.4927 |
+| strict | C1_Combined | ElasticNet | Builtin | 4 | Gender | 5.0273 |
+| strict | C1_Combined | ElasticNet | Permutation | 1 | Axial length (mm) | 0.6503 |
+| strict | C1_Combined | ElasticNet | Permutation | 2 | Gender | -0.0150 |
+| strict | C1_Combined | ElasticNet | Permutation | 3 | Age | -0.0339 |
+| strict | C1_Combined | ElasticNet | Permutation | 4 | Spherical equivalent refraction (D) | -0.0493 |
+| strict | C1_Combined | ElasticNet | SHAP | 1 | Axial length (mm) | 287.7965 |
+| strict | C1_Combined | ElasticNet | SHAP | 2 | Spherical equivalent refraction (D) | 103.7631 |
+| strict | C1_Combined | ElasticNet | SHAP | 3 | Gender | 27.4952 |
+| strict | C1_Combined | ElasticNet | SHAP | 4 | Age | 25.9140 |
+| strict | C1_Combined | Lasso | Builtin | 1 | Axial length (mm) | 378.7828 |
+| strict | C1_Combined | Lasso | Builtin | 2 | Spherical equivalent refraction (D) | 195.2202 |
+| strict | C1_Combined | Lasso | Builtin | 3 | Age | 60.6440 |
+| strict | C1_Combined | Lasso | Builtin | 4 | Gender | 5.0418 |
+| strict | C1_Combined | Lasso | Permutation | 1 | Axial length (mm) | 0.6497 |
+| strict | C1_Combined | Lasso | Permutation | 2 | Gender | -0.0152 |
+| strict | C1_Combined | Lasso | Permutation | 3 | Age | -0.0337 |
+| strict | C1_Combined | Lasso | Permutation | 4 | Spherical equivalent refraction (D) | -0.0510 |
+| strict | C1_Combined | Lasso | SHAP | 1 | Axial length (mm) | 288.3315 |
+| strict | C1_Combined | Lasso | SHAP | 2 | Spherical equivalent refraction (D) | 104.0326 |
+| strict | C1_Combined | Lasso | SHAP | 3 | Gender | 27.5988 |
+| strict | C1_Combined | Lasso | SHAP | 4 | Age | 25.9722 |
+| strict | C1_Combined | Neural_Network | Permutation | 1 | Axial length (mm) | 0.0006 |
+| strict | C1_Combined | Neural_Network | Permutation | 2 | Spherical equivalent refraction (D) | 0.0003 |
+| strict | C1_Combined | Neural_Network | Permutation | 3 | Gender | -0.0000 |
+| strict | C1_Combined | Neural_Network | Permutation | 4 | Age | -0.0004 |
+| strict | C1_Combined | Neural_Network | SHAP | 1 | Axial length (mm) | 0.2777 |
+| strict | C1_Combined | Neural_Network | SHAP | 2 | Spherical equivalent refraction (D) | 0.1619 |
+| strict | C1_Combined | Neural_Network | SHAP | 3 | Age | 0.0517 |
+| strict | C1_Combined | Neural_Network | SHAP | 4 | Gender | 0.0393 |
+| strict | C1_Combined | Ridge | Builtin | 1 | Axial length (mm) | 378.6986 |
+| strict | C1_Combined | Ridge | Builtin | 2 | Spherical equivalent refraction (D) | 195.1975 |
+| strict | C1_Combined | Ridge | Builtin | 3 | Age | 60.6082 |
+| strict | C1_Combined | Ridge | Builtin | 4 | Gender | 5.0390 |
+| strict | C1_Combined | Ridge | Permutation | 1 | Axial length (mm) | 0.6499 |
+| strict | C1_Combined | Ridge | Permutation | 2 | Gender | -0.0151 |
+| strict | C1_Combined | Ridge | Permutation | 3 | Age | -0.0338 |
+| strict | C1_Combined | Ridge | Permutation | 4 | Spherical equivalent refraction (D) | -0.0505 |
+| strict | C1_Combined | Ridge | SHAP | 1 | Axial length (mm) | 288.1677 |
+| strict | C1_Combined | Ridge | SHAP | 2 | Spherical equivalent refraction (D) | 103.9499 |
+| strict | C1_Combined | Ridge | SHAP | 3 | Gender | 27.5676 |
+| strict | C1_Combined | Ridge | SHAP | 4 | Age | 25.9550 |
 
 ## 四、主要发现
 
-1. **最稳定配置**：lenient + C1_Combined + Ridge (Bootstrap R^2 = 0.175)
-2. **Fine 最高配置**：lenient + C1_Combined + Random_Forest (Fine R^2 = 0.526)
-3. **平均特征重要性排序（已归一化）**：Axial length (mm) (1.000, rank 1), Spherical equivalent refraction (D) (0.565, rank 2), Anterior chamber depth (mm) (0.136, rank 3), Age (0.091, rank 4), Gender (0.011, rank 5)
+1. **最稳定配置**：strict + C1_Combined + Neural_Network (Bootstrap R^2 = 0.069)
+2. **Fine 最高配置**：strict + A1_Biomechanical_Core + Lasso (Fine R^2 = 0.499)
+3. **平均特征重要性排序（已归一化）**：Axial length (mm) (1.000, rank 1), Spherical equivalent refraction (D) (0.335, rank 2), Anterior chamber depth (mm) (0.219, rank 3), Age (0.086, rank 4), Gender (0.044, rank 5)
     - 三种方法（Builtin / Permutation / SHAP）在各自模型内归一化后取平均。
-    - 第一名 `Axial length (mm)` 的归一化重要性（1.000）显著高于第二名 `Spherical equivalent refraction (D)`（0.565）。
+    - 第一名 `Axial length (mm)` 的归一化重要性（1.000）显著高于第二名 `Spherical equivalent refraction (D)`（0.335）。
 
 ## 五、可视化
 

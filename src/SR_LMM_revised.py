@@ -184,7 +184,7 @@ def fit_lmm_per_distance(df_agg):
 
         try:
             model = smf.mixedlm(formula, sub, groups=sub['Real_Subject_ID'])
-            fit = model.fit(reml=False)
+            fit = model.fit(reml=True)
 
             al_beta = fit.params["Q('Axial length (mm)_z')"]
             al_p = fit.pvalues["Q('Axial length (mm)_z')"]

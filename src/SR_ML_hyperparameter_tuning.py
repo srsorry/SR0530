@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from scipy import stats
 
 import matplotlib
 matplotlib.use('Agg')
@@ -55,7 +56,7 @@ SCHEMA = {
 
 MYOPIA_THRESHOLD = -0.5
 RANDOM_STATE = 42
-N_ITER = 10
+N_ITER = 30
 
 # 象限聚合策略
 MIN_QUADRANTS = 1  # 当前运行模式：1 = 放宽为 ≥1 象限平均；4 = 不放宽
@@ -263,13 +264,12 @@ def group_stratified_kfold(groups, y_stratify, n_splits=5, random_state=42):
 
 
 def sample_params(param_space, rng):
-    """从参数空间中随机采样一组参数（兼容元组等复杂类型）"""
-    import random
+    """从参数空间中随机采样一组参数（兼容元组、None 等复杂类型）"""
     params = {}
     for k, v in param_space.items():
         if isinstance(v, list):
-            # 使用 Python 原生 random.choice，可处理元组、None 等混合类型
-            params[k] = random.choice(v)
+            # 使用 rng.randint 索引，避免 numpy.choice 对混合类型列表创建数组失败
+            params[k] = v[rng.randint(0, len(v))]
         else:
             params[k] = v
     return params
@@ -320,6 +320,7 @@ def evaluate_params(model_builder, params, X, y, groups, y_stratify, use_y_std=F
         'test_corr': np.mean(test_corr_list),
         'test_mape': np.mean(test_mape_list),
         'test_rmse': np.mean(test_rmse_list),
+        'test_rmse_std': np.std(test_rmse_list),
         'gap': np.mean(train_r2_list) - np.mean(test_r2_list)
     }
 
@@ -429,9 +430,11 @@ def main():
                             'Params': str(trial['params']),
                             'Train_R2': trial['train_r2'],
                             'Test_R2': trial['test_r2'],
+                            'Test_R2_Std': trial['test_r2_std'],
                             'Gap': trial['gap'],
                             'Test_MAPE': trial['test_mape'],
-                            'Test_RMSE': trial['test_rmse']
+                            'Test_RMSE': trial['test_rmse'],
+                            'Test_RMSE_Std': trial['test_rmse_std']
                         })
 
     # 保存结果
@@ -467,7 +470,9 @@ def generate_visualizations(df_results, mode_label='q4'):
         pivot = best_per_dm.pivot(index='Distance_mm', columns='Model', values='test_r2')
 
         fig, ax = plt.subplots(figsize=(14, 8))
-        im = ax.imshow(pivot.values, aspect='auto', cmap='RdYlGn', vmin=-0.5, vmax=0.5)
+        vmax = max(0.5, np.nanmax(pivot.values))
+        vmin = min(-0.5, np.nanmin(pivot.values))
+        im = ax.imshow(pivot.values, aspect='auto', cmap='RdYlGn', vmin=vmin, vmax=vmax)
         ax.set_xticks(np.arange(len(pivot.columns)))
         ax.set_yticks(np.arange(len(pivot.index)))
         ax.set_xticklabels(pivot.columns, rotation=45, ha='right')
@@ -545,6 +550,15 @@ def generate_visualizations(df_results, mode_label='q4'):
 # ============================================================
 # 报告生成
 # ============================================================
+def compute_t_ci(mean, std, n_folds=5, alpha=0.05):
+    """基于 fold 级均值与标准差计算 t 分布近似 95% CI。"""
+    if pd.isna(std) or n_folds < 2:
+        return np.nan, np.nan
+    se = std / np.sqrt(n_folds)
+    t_val = stats.t.ppf(1 - alpha / 2, df=n_folds - 1)
+    return mean - t_val * se, mean + t_val * se
+
+
 def generate_report(df_results, mode_label='q4'):
     """生成 Markdown 报告"""
     mode_desc = {
@@ -558,6 +572,7 @@ def generate_report(df_results, mode_label='q4'):
     md.append(f"> **搜索策略**：Random Search + GroupKFold by Subject，每模型 {N_ITER} 组参数\n\n")
     md.append(f"> **象限策略**：{mode_desc}\n\n")
     md.append("> **数据组**：`CleanDataRoi_strict/`（任意 ROI >7000 剔除）和 `CleanDataRoi_lenient/`（距离平均 >7000 剔除）\n\n")
+    md.append("> **置信区间说明**：Test R² 与 RMSE 后的 95% CI 基于 5-fold CV 的 fold-level 标准差，使用 t 分布近似（t₀.₀₂₅,₄ = 2.776）。\n\n")
 
     md.append("---\n\n")
 
@@ -573,11 +588,14 @@ def generate_report(df_results, mode_label='q4'):
     # 二、总体最佳配置
     md.append("\n## 二、总体最佳配置\n\n")
     best_row = df_results.loc[df_results['test_r2'].idxmax()]
+    r2_lo, r2_hi = compute_t_ci(best_row['test_r2'], best_row['test_r2_std'])
+    rmse_lo, rmse_hi = compute_t_ci(best_row['test_rmse'], best_row['test_rmse_std'])
     md.append(f"- **数据组**：{best_row['Data_Group']}\n")
     md.append(f"- **距离**：{best_row['Distance_mm']:.1f} mm\n")
     md.append(f"- **方案**：{best_row['Schema']}\n")
     md.append(f"- **模型**：{best_row['Model']}\n")
-    md.append(f"- **最佳 Test R²**：{best_row['test_r2']:.3f}\n")
+    md.append(f"- **最佳 Test R²**：{best_row['test_r2']:.3f} [95% CI: {r2_lo:.3f}, {r2_hi:.3f}]\n")
+    md.append(f"- **最佳 RMSE**：{best_row['test_rmse']:.1f} [95% CI: {rmse_lo:.1f}, {rmse_hi:.1f}]\n")
     md.append(f"- **最佳参数**：{best_row['Best_Params']}\n")
     md.append(f"- **样本量**：{int(best_row['N_Eyes'])} 眼 / {int(best_row['N_Subjects'])} subjects\n\n")
 
@@ -588,50 +606,58 @@ def generate_report(df_results, mode_label='q4'):
         df_g = df_results[df_results['Data_Group'] == data_group]
 
         # 每个距离的最佳配置
-        md.append("| 距离 (mm) | 最佳方案 | 最佳模型 | Test R² | MAPE (%) | RMSE | Gap | 最佳参数 |\n")
-        md.append("|-----------|---------|---------|---------|----------|------|-----|---------|\n")
+        md.append("| 距离 (mm) | 最佳方案 | 最佳模型 | Test R² (95% CI) | MAPE (%) | RMSE (95% CI) | Gap | 最佳参数 |\n")
+        md.append("|-----------|---------|---------|------------------|----------|----------------|-----|---------|\n")
 
         for dist in sorted(df_g['Distance_mm'].unique()):
             df_d = df_g[df_g['Distance_mm'] == dist]
             best = df_d.loc[df_d['test_r2'].idxmax()]
+            r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
+            rmse_lo, rmse_hi = compute_t_ci(best['test_rmse'], best['test_rmse_std'])
             md.append(f"| {best['Distance_mm']:.1f} | {best['Schema']} | {best['Model']} | "
-                      f"{best['test_r2']:.3f} | {best['test_mape']:.2f} | {best['test_rmse']:.1f} | "
+                      f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {best['test_mape']:.2f} | "
+                      f"{best['test_rmse']:.1f} [{rmse_lo:.1f}, {rmse_hi:.1f}] | "
                       f"{best['gap']:.3f} | `{best['Best_Params']}` |\n")
 
         md.append("\n")
 
     # 四、每个模型在每个数据组的最佳结果
     md.append("## 四、每个模型在每个数据组的最佳结果\n\n")
-    md.append("| 数据组 | 模型 | 最佳距离 | 最佳方案 | Test R² | MAPE (%) | 最佳参数 |\n")
-    md.append("|--------|------|---------|---------|---------|----------|---------|\n")
+    md.append("| 数据组 | 模型 | 最佳距离 | 最佳方案 | Test R² (95% CI) | MAPE (%) | 最佳参数 |\n")
+    md.append("|--------|------|---------|---------|------------------|----------|---------|\n")
     for data_group in ['strict', 'lenient']:
         df_g = df_results[df_results['Data_Group'] == data_group]
         for model_name in sorted(df_g['Model'].unique()):
             df_m = df_g[df_g['Model'] == model_name]
             best = df_m.loc[df_m['test_r2'].idxmax()]
+            r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
             md.append(f"| {data_group} | {model_name} | {best['Distance_mm']:.1f} mm | {best['Schema']} | "
-                      f"{best['test_r2']:.3f} | {best['test_mape']:.2f} | `{best['Best_Params']}` |\n")
+                      f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {best['test_mape']:.2f} | `{best['Best_Params']}` |\n")
     md.append("\n")
 
     # 五、每个方案的最佳结果
     md.append("## 五、每个特征方案的最佳结果\n\n")
-    md.append("| 方案 | 数据组 | 最佳距离 | 最佳模型 | Test R² |\n")
-    md.append("|------|--------|---------|---------|----------|\n")
+    md.append("| 方案 | 数据组 | 最佳距离 | 最佳模型 | Test R² (95% CI) |\n")
+    md.append("|------|--------|---------|---------|------------------|\n")
     for schema_name in df_results['Schema'].unique():
         df_s = df_results[df_results['Schema'] == schema_name]
         best = df_s.loc[df_s['test_r2'].idxmax()]
-        md.append(f"| {schema_name} | {best['Data_Group']} | {best['Distance_mm']:.1f} mm | {best['Model']} | {best['test_r2']:.3f} |\n")
+        r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
+        md.append(f"| {schema_name} | {best['Data_Group']} | {best['Distance_mm']:.1f} mm | {best['Model']} | "
+                  f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] |\n")
     md.append("\n")
 
     # 六、详细结果表
     md.append("## 六、全部详细结果\n\n")
-    md.append("| 数据组 | 距离 | 方案 | 模型 | N_Eyes | N_Subj | Train R² | Test R² | Corr | MAPE | RMSE | Gap | 最佳参数 |\n")
-    md.append("|--------|------|------|------|--------|--------|----------|---------|------|------|------|-----|---------|\n")
+    md.append("| 数据组 | 距离 | 方案 | 模型 | N_Eyes | N_Subj | Train R² | Test R² (95% CI) | Corr | MAPE | RMSE (95% CI) | Gap | 最佳参数 |\n")
+    md.append("|--------|------|------|------|--------|--------|----------|------------------|------|------|----------------|-----|---------|\n")
     for _, row in df_results.iterrows():
+        r2_lo, r2_hi = compute_t_ci(row['test_r2'], row['test_r2_std'])
+        rmse_lo, rmse_hi = compute_t_ci(row['test_rmse'], row['test_rmse_std'])
         md.append(f"| {row['Data_Group']} | {row['Distance_mm']:.1f} | {row['Schema']} | {row['Model']} | "
                   f"{int(row['N_Eyes'])} | {int(row['N_Subjects'])} | {row['train_r2']:.3f} | "
-                  f"{row['test_r2']:.3f} | {row['test_corr']:.3f} | {row['test_mape']:.2f} | "
-                  f"{row['test_rmse']:.1f} | {row['gap']:.3f} | `{row['Best_Params']}` |\n")
+                  f"{row['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {row['test_corr']:.3f} | {row['test_mape']:.2f} | "
+                  f"{row['test_rmse']:.1f} [{rmse_lo:.1f}, {rmse_hi:.1f}] | {row['gap']:.3f} | `{row['Best_Params']}` |\n")
 
     # 七、可视化
     md.append("\n## 七、可视化\n\n")
@@ -649,7 +675,8 @@ def generate_report(df_results, mode_label='q4'):
     md.append("1. **数据组差异**：strict 模式移除了局部 ROI 异常值，数据更干净；lenient 模式保留了更多样本但可能混入异常。\n")
     md.append("2. **最佳参数稳定性**：如果某模型在 strict 和 lenient 下的最佳参数差异很大，提示该模型对异常值敏感。\n")
     md.append("3. **方案选择**：各方案表现因距离和数据组而异，最佳方案需结合 Test R²、Gap 和参数稳定性综合判断，具体见上述结果表。\n")
-    md.append("4. **参数寻优局限**：Random Search 的 n_iter=10 是计算与精度的折中，关键模型可进一步增加迭代次数。\n\n")
+    md.append("4. **置信区间解释**：R² 与 RMSE 的 95% CI 反映 5-fold CV fold 间变异；R² CI 跨越 0 或 RMSE CI 范围过大，均提示该配置泛化能力不稳定。\n")
+    md.append("5. **参数寻优局限**：Random Search 的 n_iter 是计算与精度的折中，关键模型可进一步增加迭代次数。\n\n")
 
     md.append("---\n\n")
     md.append("*Report generated automatically by SR_ML_hyperparameter_tuning.py*\n")

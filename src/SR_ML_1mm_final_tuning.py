@@ -10,6 +10,7 @@ import ast
 import warnings
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 import matplotlib
 matplotlib.use('Agg')
@@ -313,11 +314,12 @@ def build_fine_space(model_name, coarse_params):
 
 
 def sample_params(param_space, rng):
-    import random
+    """从参数空间中随机采样一组参数（兼容元组、None 等复杂类型）"""
     params = {}
     for k, v in param_space.items():
         if isinstance(v, list):
-            params[k] = random.choice(v)
+            # 使用 rng.randint 索引，避免 numpy.choice 对混合类型列表创建数组失败
+            params[k] = v[rng.randint(0, len(v))]
         else:
             params[k] = v
     return params
@@ -367,6 +369,7 @@ def evaluate_params(model_builder, params, X, y, groups, y_stratify, use_y_std=F
         'test_corr': np.mean(test_corr_list),
         'test_mape': np.mean(test_mape_list),
         'test_rmse': np.mean(test_rmse_list),
+        'test_rmse_std': np.std(test_rmse_list),
         'gap': np.mean(train_r2_list) - np.mean(test_r2_list)
     }
 
@@ -395,9 +398,9 @@ def fine_tune(model_name, model_builder, fine_space, X, y, groups, y_stratify, n
     return best_params, best_metrics, all_trials
 
 
-def bootstrap_final_performance(model_builder, best_params, X, y, groups, y_stratify, use_y_std=False,
-                                n_splits=5, n_repeats=100):
-    """用不同 CV seed 重复评估最佳参数，返回稳定性分布。"""
+def repeated_cv_stability(model_builder, best_params, X, y, groups, y_stratify, use_y_std=False,
+                          n_splits=5, n_repeats=100):
+    """用不同 CV seed 重复评估最佳参数，返回稳定性分布（NaN-safe）。"""
     scores = []
     for r in range(n_repeats):
         metrics = evaluate_params(
@@ -407,12 +410,12 @@ def bootstrap_final_performance(model_builder, best_params, X, y, groups, y_stra
         scores.append(metrics['test_r2'])
     scores = np.array(scores)
     return {
-        'mean': np.mean(scores),
-        'std': np.std(scores),
-        'ci_lower': np.percentile(scores, 2.5),
-        'ci_upper': np.percentile(scores, 97.5),
-        'min': np.min(scores),
-        'max': np.max(scores),
+        'mean': np.nanmean(scores),
+        'std': np.nanstd(scores),
+        'ci_lower': np.nanpercentile(scores, 2.5),
+        'ci_upper': np.nanpercentile(scores, 97.5),
+        'min': np.nanmin(scores),
+        'max': np.nanmax(scores),
         'scores': scores.tolist()
     }
 
@@ -491,6 +494,61 @@ def compute_shap_importance(model, X, feature_names):
     except Exception as e:
         print(f"    SHAP failed: {e}")
         return None
+
+
+def compute_cv_feature_importance(model_builder, best_params, X, y, groups, y_stratify,
+                                  feature_names, use_y_std=False, n_splits=5,
+                                  n_perm_repeats=30, random_state=42):
+    """用 GroupKFold 在测试集上计算 Permutation 和 SHAP 重要性，返回跨 fold 平均。"""
+    n_subjects = len(np.unique(groups))
+    n_splits = min(n_splits, n_subjects // 2)
+    if n_splits < 2:
+        n_splits = 2
+
+    splits = group_stratified_kfold(groups, y_stratify, n_splits=n_splits, random_state=random_state)
+
+    perm_records = []
+    shap_records = []
+
+    for fold_idx, (ti, vi) in enumerate(splits):
+        model = model_builder(best_params)
+        if use_y_std:
+            sx, sy = StandardScaler(), StandardScaler()
+            Xt = sx.fit_transform(X.iloc[ti])
+            Xv = sx.transform(X.iloc[vi])
+            yt = sy.fit_transform(y.iloc[ti].values.reshape(-1, 1)).ravel()
+            yv = y.iloc[vi].values
+            model.fit(Xt, yt)
+            perm = permutation_importance(model, Xv, yv, n_repeats=n_perm_repeats,
+                                          random_state=random_state + fold_idx, n_jobs=1)
+            Xv_df = pd.DataFrame(Xv, columns=feature_names)
+            shap_imp = compute_shap_importance(model, Xv_df, feature_names)
+        else:
+            Xt, Xv = X.iloc[ti], X.iloc[vi]
+            yt, yv = y.iloc[ti], y.iloc[vi]
+            model.fit(Xt, yt)
+            perm = permutation_importance(model, Xv, yv, n_repeats=n_perm_repeats,
+                                          random_state=random_state + fold_idx, n_jobs=1)
+            shap_imp = compute_shap_importance(model, Xv, feature_names)
+
+        perm_records.append(pd.DataFrame({
+            'Feature': feature_names,
+            'Importance_Mean': perm.importances_mean,
+            'Importance_Std': perm.importances_std
+        }))
+        if shap_imp is not None:
+            shap_records.append(shap_imp)
+
+    perm_avg = pd.concat(perm_records).groupby('Feature')[['Importance_Mean', 'Importance_Std']].mean().reset_index()
+    perm_avg = perm_avg.sort_values('Importance_Mean', ascending=False)
+
+    if shap_records:
+        shap_avg = pd.concat(shap_records).groupby('Feature')['Importance'].mean().reset_index()
+        shap_avg = shap_avg.sort_values('Importance', ascending=False)
+    else:
+        shap_avg = None
+
+    return perm_avg, shap_avg
 
 
 def plot_importance(df_imp, title, out_path):
@@ -611,8 +669,8 @@ def main():
 
         print(f"  Fine R^2 = {best_metrics['test_r2']:.3f} | params = {best_params}")
 
-        # Bootstrap 稳定性
-        stability = bootstrap_final_performance(
+        # Bootstrap 稳定性（实际为 Repeated CV）
+        stability = repeated_cv_stability(
             model_builder, best_params, X, y, groups, y_strat,
             use_y_std=USE_Y_STD[model_name], n_splits=N_SPLITS, n_repeats=N_FINAL_BOOTSTRAP
         )
@@ -653,13 +711,13 @@ def main():
                     'Importance': imp_row['Importance']
                 })
 
-        # (b) Permutation importance
-        if USE_Y_STD[model_name]:
-            perm_imp = compute_permutation_importance(final_model, sx.transform(X), y.values, feat_full,
-                                                      n_repeats=N_PERM_REPEATS, random_state=RANDOM_STATE)
-        else:
-            perm_imp = compute_permutation_importance(final_model, X, y.values, feat_full,
-                                                      n_repeats=N_PERM_REPEATS, random_state=RANDOM_STATE)
+        # (b) Permutation & SHAP importance（在 CV 测试集上计算，避免乐观偏差）
+        perm_imp, shap_imp = compute_cv_feature_importance(
+            model_builder, best_params, X, y, groups, y_strat, feat_full,
+            use_y_std=USE_Y_STD[model_name], n_splits=N_SPLITS,
+            n_perm_repeats=N_PERM_REPEATS, random_state=RANDOM_STATE
+        )
+
         perm_path = os.path.join(OUT_DIR, f'SR0530_1mm_{data_group}_{schema_name}_{model_name}_Permutation_Importance.png')
         plot_importance(perm_imp, f'{model_name} Permutation Importance ({data_group} {schema_name})', perm_path)
         for _, imp_row in perm_imp.iterrows():
@@ -673,24 +731,18 @@ def main():
             })
 
         # (c) SHAP importance
-        shap_imp = None
-        if SHAP_AVAILABLE:
-            if USE_Y_STD[model_name]:
-                shap_imp = compute_shap_importance(final_model, sx.transform(X), feat_full)
-            else:
-                shap_imp = compute_shap_importance(final_model, X, feat_full)
-            if shap_imp is not None:
-                shap_path = os.path.join(OUT_DIR, f'SR0530_1mm_{data_group}_{schema_name}_{model_name}_SHAP_Importance.png')
-                plot_importance(shap_imp, f'{model_name} SHAP Importance ({data_group} {schema_name})', shap_path)
-                for _, imp_row in shap_imp.iterrows():
-                    importance_records.append({
-                        'Data_Group': data_group,
-                        'Schema': schema_name,
-                        'Model': model_name,
-                        'Method': 'SHAP',
-                        'Feature': imp_row['Feature'],
-                        'Importance': imp_row['Importance']
-                    })
+        if shap_imp is not None:
+            shap_path = os.path.join(OUT_DIR, f'SR0530_1mm_{data_group}_{schema_name}_{model_name}_SHAP_Importance.png')
+            plot_importance(shap_imp, f'{model_name} SHAP Importance ({data_group} {schema_name})', shap_path)
+            for _, imp_row in shap_imp.iterrows():
+                importance_records.append({
+                    'Data_Group': data_group,
+                    'Schema': schema_name,
+                    'Model': model_name,
+                    'Method': 'SHAP',
+                    'Feature': imp_row['Feature'],
+                    'Importance': imp_row['Importance']
+                })
 
         # 保存结果
         results.append({
@@ -706,6 +758,7 @@ def main():
             'Fine_Test_Corr': best_metrics['test_corr'],
             'Fine_Test_MAPE': best_metrics['test_mape'],
             'Fine_Test_RMSE': best_metrics['test_rmse'],
+            'Fine_Test_RMSE_Std': best_metrics['test_rmse_std'],
             'Fine_Gap': best_metrics['gap'],
             'Bootstrap_Mean': stability['mean'],
             'Bootstrap_Std': stability['std'],
@@ -823,6 +876,16 @@ def plot_summary(df_results, df_importance):
     plt.close()
 
 
+def compute_t_ci(mean, std, n_folds=5, alpha=0.05):
+    """基于 fold 级均值与标准差计算 t 分布近似 95% CI。"""
+    from scipy import stats
+    if pd.isna(std) or n_folds < 2:
+        return np.nan, np.nan
+    se = std / np.sqrt(n_folds)
+    t_val = stats.t.ppf(1 - alpha / 2, df=n_folds - 1)
+    return mean - t_val * se, mean + t_val * se
+
+
 def generate_report(df_results, df_importance):
     """生成 Markdown 最终报告。"""
     md = []
@@ -836,25 +899,32 @@ def generate_report(df_results, df_importance):
     md.append("## 一、总体最佳配置\n\n")
     if not df_results.empty:
         best = df_results.loc[df_results['Bootstrap_Mean'].idxmax()]
+        r2_lo, r2_hi = compute_t_ci(best['Fine_Test_R2'], best['Fine_Test_R2_Std'])
+        rmse_lo, rmse_hi = compute_t_ci(best['Fine_Test_RMSE'], best['Fine_Test_RMSE_Std'])
         md.append(f"- **数据组**：{best['Data_Group']}\n")
         md.append(f"- **方案**：{best['Schema']}\n")
         md.append(f"- **模型**：{best['Model']}\n")
-        md.append(f"- **Fine Test R^2**：{best['Fine_Test_R2']:.3f}\n")
+        md.append(f"- **Fine Test R^2**：{best['Fine_Test_R2']:.3f} "
+                  f"[95% CI: {r2_lo:.3f}, {r2_hi:.3f}]\n")
         md.append(f"- **Bootstrap R^2**：{best['Bootstrap_Mean']:.3f} ± {best['Bootstrap_Std']:.3f} "
                   f"[95% CI: {best['Bootstrap_CI_Lower']:.3f}, {best['Bootstrap_CI_Upper']:.3f}]\n")
         md.append(f"- **Train R^2 / Gap**：{best['Fine_Train_R2']:.3f} / {best['Fine_Gap']:.3f}\n")
-        md.append(f"- **MAPE / RMSE**：{best['Fine_Test_MAPE']:.2f}% / {best['Fine_Test_RMSE']:.1f}\n")
+        md.append(f"- **MAPE / RMSE**：{best['Fine_Test_MAPE']:.2f}% / {best['Fine_Test_RMSE']:.1f} "
+                  f"[95% CI: {rmse_lo:.1f}, {rmse_hi:.1f}]\n")
         md.append(f"- **样本量**：{int(best['N_Eyes'])} 眼 / {int(best['N_Subjects'])} subjects\n")
         md.append(f"- **最佳参数**：`{best['Fine_Best_Params']}`\n\n")
 
     # 二、全部配置结果
     md.append("## 二、全部配置精细调优结果\n\n")
-    md.append("| 数据组 | 方案 | 模型 | Coarse R^2 | Fine R^2 | Train R^2 | Gap | MAPE | RMSE | Bootstrap Mean±Std | 95% CI |\n")
-    md.append("|--------|------|------|-----------|---------|----------|-----|------|------|--------------------|--------|\n")
+    md.append("| 数据组 | 方案 | 模型 | Coarse R^2 | Fine R^2 (95% CI) | Train R^2 | Gap | MAPE | RMSE (95% CI) | Bootstrap R^2 Mean±Std | Bootstrap 95% CI |\n")
+    md.append("|--------|------|------|-----------|-------------------|----------|-----|------|----------------|------------------------|------------------|\n")
     for _, row in df_results.iterrows():
+        r2_lo, r2_hi = compute_t_ci(row['Fine_Test_R2'], row['Fine_Test_R2_Std'])
+        rmse_lo, rmse_hi = compute_t_ci(row['Fine_Test_RMSE'], row['Fine_Test_RMSE_Std'])
         md.append(f"| {row['Data_Group']} | {row['Schema']} | {row['Model']} | "
-                  f"{row['Coarse_Test_R2']:.3f} | {row['Fine_Test_R2']:.3f} | {row['Fine_Train_R2']:.3f} | "
-                  f"{row['Fine_Gap']:.3f} | {row['Fine_Test_MAPE']:.2f} | {row['Fine_Test_RMSE']:.1f} | "
+                  f"{row['Coarse_Test_R2']:.3f} | {row['Fine_Test_R2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | "
+                  f"{row['Fine_Train_R2']:.3f} | {row['Fine_Gap']:.3f} | {row['Fine_Test_MAPE']:.2f} | "
+                  f"{row['Fine_Test_RMSE']:.1f} [{rmse_lo:.1f}, {rmse_hi:.1f}] | "
                   f"{row['Bootstrap_Mean']:.3f} ± {row['Bootstrap_Std']:.3f} | "
                   f"[{row['Bootstrap_CI_Lower']:.3f}, {row['Bootstrap_CI_Upper']:.3f}] |\n")
     md.append("\n")
