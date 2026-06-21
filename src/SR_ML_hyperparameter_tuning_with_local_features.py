@@ -1,0 +1,832 @@
+import os
+import glob
+import warnings
+import numpy as np
+import pandas as pd
+from copy import deepcopy
+from scipy import stats
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GroupKFold
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVR
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.linear_model import Lasso, ElasticNet, Ridge
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from xgboost import XGBRegressor
+
+warnings.filterwarnings('ignore')
+
+# ============================================================
+# 配置
+# ============================================================
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIRS = {
+    'strict': os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_strict'),
+    'lenient': os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_lenient')
+}
+OUT_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
+REPORT_DIR = os.path.join(BASE_DIR, 'report')
+FIG_DIR = os.path.join(REPORT_DIR, 'FIG')
+os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(FIG_DIR, exist_ok=True)
+
+# 全局（眼/受试者水平）特征
+FEATURE_ALL = {
+    'AL': 'Axial length (mm)',
+    'Age': 'Age',
+    'SE': 'Spherical equivalent refraction (D)',
+    'Gender': 'Gender',
+    'K': 'Corneal curvature (mm)',
+    'ACD': 'Anterior chamber depth (mm)',
+    # 局部结构特征（按象限采集，需跨象限平均）
+    'ConeSpacing': 'Cone spacing',
+    'ConeDispersion': 'Cone dispersion',
+    'ConeRegularity': 'Cone regularity',
+    'BloodVesselRatio': 'Blood Vessel Ratio'
+}
+
+# 局部特征子集
+LOCAL_CORE = ['ConeDispersion', 'ConeRegularity']
+LOCAL_FULL = ['ConeSpacing', 'ConeDispersion', 'ConeRegularity', 'BloodVesselRatio']
+LOCAL_COLS = [FEATURE_ALL[k] for k in LOCAL_FULL]
+STATIC_COLS = [FEATURE_ALL[k] for k in FEATURE_ALL.keys() if k not in LOCAL_FULL]
+
+TARGET_COL = 'Angular cone density (cones/ deg2)'
+
+# 特征方案：保留 q1plus 报告中的基线方案，并增加局部特征方案
+SCHEMA = {
+    # ---- 基线方案（来自 SR0530_ML_Hyperparameter_Tuning_q1plus_Report.md） ----
+    'A1_Biomechanical_Core': ['AL', 'Age', 'Gender'],
+    'A2_Biomechanical_NoK': ['AL', 'ACD', 'Age', 'Gender'],
+    'B_Clinical': ['SE', 'Age', 'Gender'],
+    'C1_Combined': ['SE', 'AL', 'Age', 'Gender'],
+    # ---- 仅局部结构特征 ----
+    'D1_Local_Core': LOCAL_CORE,
+    'D2_Local_Full': LOCAL_FULL,
+    # ---- 基线 + 局部核心特征（2 个）----
+    'E1_A1_Local_Core': ['AL', 'Age', 'Gender'] + LOCAL_CORE,
+    'E2_A2_Local_Core': ['AL', 'ACD', 'Age', 'Gender'] + LOCAL_CORE,
+    'E3_C1_Local_Core': ['SE', 'AL', 'Age', 'Gender'] + LOCAL_CORE,
+    # ---- 基线 + 全部局部特征（4 个）----
+    'F1_A1_Local_Full': ['AL', 'Age', 'Gender'] + LOCAL_FULL,
+    'F2_A2_Local_Full': ['AL', 'ACD', 'Age', 'Gender'] + LOCAL_FULL,
+    'F3_C1_Local_Full': ['SE', 'AL', 'Age', 'Gender'] + LOCAL_FULL,
+}
+
+MYOPIA_THRESHOLD = -0.5
+RANDOM_STATE = 42
+N_ITER = 30
+
+# 象限聚合策略：沿用 q1plus 的放宽策略（≥1 象限即可纳入）
+MIN_QUADRANTS = 1
+MODE_LABEL = 'q1plus_local'
+
+# ============================================================
+# 参数搜索空间（与 q1plus 报告完全一致）
+# ============================================================
+PARAM_SPACE = {
+    'SVM': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('v', SVR(**p))]),
+        'params': {
+            'C': [100, 500, 1000, 2000, 5000],
+            'epsilon': [100, 300, 500, 800, 1000],
+            'gamma': [0.001, 0.005, 0.01, 0.03, 0.05, 0.1]
+        }
+    },
+    'Random_Forest': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('rf', RandomForestRegressor(**p, random_state=RANDOM_STATE, n_jobs=1))]),
+        'params': {
+            'n_estimators': [50, 100, 200, 300],
+            'max_depth': [2, 3, 4, 5, None],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4]
+        }
+    },
+    'XGBoost': {
+        'model': lambda p: XGBRegressor(**p, random_state=RANDOM_STATE, verbosity=0),
+        'params': {
+            'learning_rate': [0.001, 0.005, 0.01, 0.05, 0.1],
+            'max_depth': [1, 2, 3, 4],
+            'n_estimators': [30, 50, 100, 200],
+            'reg_alpha': [0.1, 0.5, 1.0, 2.0],
+            'reg_lambda': [0.1, 0.5, 1.0, 2.0]
+        }
+    },
+    'Neural_Network': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('nn', MLPRegressor(**p, max_iter=5000, early_stopping=True, validation_fraction=0.15, n_iter_no_change=20, random_state=RANDOM_STATE))]),
+        'params': {
+            'hidden_layer_sizes': [(40,), (60,), (80,), (100,), (80, 40)],
+            'alpha': [0.1, 0.3, 0.5, 1.0],
+            'learning_rate_init': [0.0001, 0.0005, 0.001]
+        }
+    },
+    'Lasso': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('lasso', Lasso(**p, max_iter=5000))]),
+        'params': {
+            'alpha': [0.001, 0.01, 0.1, 1.0, 10.0]
+        }
+    },
+    'ElasticNet': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('en', ElasticNet(**p, max_iter=5000))]),
+        'params': {
+            'alpha': [0.001, 0.01, 0.1, 1.0],
+            'l1_ratio': [0.1, 0.3, 0.5, 0.7, 0.9]
+        }
+    },
+    'Ridge': {
+        'model': lambda p: Pipeline([('s', StandardScaler()), ('ridge', Ridge(**p))]),
+        'params': {
+            'alpha': [0.01, 0.1, 1.0, 10.0, 100.0]
+        }
+    }
+}
+
+# 是否对 y 做标准化（仅 NN）
+USE_Y_STD = {
+    'SVM': False, 'Random_Forest': False, 'XGBoost': False,
+    'Neural_Network': True, 'Lasso': False, 'ElasticNet': False, 'Ridge': False
+}
+
+# ============================================================
+# 工具函数
+# ============================================================
+def load_subject_mapping(data_dir):
+    """从 data1.csv 读取 Eye_Label -> Subject_ID 映射"""
+    df_ref = pd.read_csv(os.path.join(data_dir, 'data1.csv'))
+    mapping = {}
+    for _, row in df_ref.iterrows():
+        eye_label = row['Eye_Label']
+        subject_id = row['Subject_ID']
+        mapping[eye_label] = subject_id
+        mapping[subject_id] = subject_id
+    return mapping
+
+
+def load_distance_data(data_dir):
+    """读取 44 个 ROI 文件，按距离聚合"""
+    all_data = {}
+    for f in sorted(glob.glob(os.path.join(data_dir, 'data*.csv'))):
+        df = pd.read_csv(f)
+        dist = df['Eccentricity (mm)'].iloc[0]
+        if dist not in all_data:
+            all_data[dist] = []
+        all_data[dist].append(df)
+    return all_data
+
+
+def aggregate_distance(dfs, eye_to_subject, min_quadrants=4):
+    """
+    按 Subject_ID + Eye 聚合象限。
+
+    改进点：
+    1. 密度仍按 q1plus 方式 outer merge 后平均。
+    2. 局部结构特征（Cone spacing/dispersion/regularity/Blood Vessel Ratio）
+       同样按 outer merge 后跨象限平均，保证与密度聚合口径一致。
+    3. 全局静态特征（AL/ACD/Age/SE/Gender/K）从首个包含该眼的象限提取。
+    """
+    # 1. 合并 4 个象限的密度
+    merged = dfs[0][['Subject_ID', 'Eye', TARGET_COL]].copy()
+    merged = merged.rename(columns={TARGET_COL: 'density_q1'})
+    for i, d in enumerate(dfs[1:], 2):
+        merged = merged.merge(
+            d[['Subject_ID', 'Eye', TARGET_COL]].rename(columns={TARGET_COL: f'density_q{i}'}),
+            on=['Subject_ID', 'Eye'], how='outer'
+        )
+    den_cols = [c for c in merged.columns if c.startswith('density_q')]
+    merged['N_Quadrants'] = merged[den_cols].notna().sum(axis=1)
+    merged[TARGET_COL] = merged[den_cols].mean(axis=1, skipna=True)
+
+    # 2. 合并并平均局部结构特征
+    for feat in LOCAL_COLS:
+        feat_merged = dfs[0][['Subject_ID', 'Eye', feat]].copy()
+        feat_merged = feat_merged.rename(columns={feat: f'{feat}_q1'})
+        for i, d in enumerate(dfs[1:], 2):
+            feat_merged = feat_merged.merge(
+                d[['Subject_ID', 'Eye', feat]].rename(columns={feat: f'{feat}_q{i}'}),
+                on=['Subject_ID', 'Eye'], how='outer'
+            )
+        q_cols = [c for c in feat_merged.columns if c.startswith(f'{feat}_q')]
+        feat_merged[feat] = feat_merged[q_cols].mean(axis=1, skipna=True)
+        merged = merged.merge(
+            feat_merged[['Subject_ID', 'Eye', feat]],
+            on=['Subject_ID', 'Eye'], how='left'
+        )
+
+    # 3. 按最少象限数过滤
+    if min_quadrants == 4:
+        merged = merged[merged['N_Quadrants'] == 4].copy()
+    else:
+        merged = merged[merged['N_Quadrants'] >= min_quadrants].copy()
+
+    # 4. 提取全局静态特征
+    features = None
+    for d in dfs:
+        df_feat = d[['Subject_ID', 'Eye'] + STATIC_COLS].drop_duplicates(['Subject_ID', 'Eye'])
+        if features is None:
+            features = df_feat
+        else:
+            features = pd.concat([features, df_feat], ignore_index=True)
+            features = features.drop_duplicates(['Subject_ID', 'Eye'], keep='first')
+
+    base = merged.merge(features, on=['Subject_ID', 'Eye'], how='left')
+    base['Real_Subject_ID'] = base['Subject_ID'].map(eye_to_subject)
+    base['Myopia'] = (base[FEATURE_ALL['SE']] <= MYOPIA_THRESHOLD).astype(int)
+
+    return base[['Subject_ID', 'Real_Subject_ID', 'Eye', 'Myopia'] + STATIC_COLS + LOCAL_COLS + ['N_Quadrants', TARGET_COL]].copy()
+
+
+def fill_na(df, cols):
+    """中位数填充缺失值"""
+    for col in cols:
+        if df[col].isna().any():
+            df[col].fillna(df[col].median(), inplace=True)
+    return df
+
+
+def calc_scores(y_true, y_pred):
+    """计算 R2、Corr、MAPE、RMSE"""
+    r2 = r2_score(y_true, y_pred)
+    corr = np.corrcoef(y_true, y_pred)[0, 1] if len(y_true) > 1 else 0
+    mape = np.mean(np.abs((y_true - y_pred) / (y_true + 1e-10))) * 100
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    return r2, corr, mape, rmse
+
+
+def group_stratified_kfold(groups, y_stratify, n_splits=5, random_state=42):
+    """按 groups 分组，并在每层内按 y_stratify 分层，确保同一 group 不会被拆分。"""
+    rng = np.random.RandomState(random_state)
+    df_idx = pd.DataFrame({'idx': np.arange(len(groups)), 'group': groups, 'y': y_stratify})
+
+    group_info = df_idx.groupby('group').agg(
+        y=('y', lambda x: int(x.mode()[0])),
+        idx=('idx', list)
+    ).reset_index()
+    group_info = group_info.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+    pos_groups = group_info[group_info['y'] == 1].copy().reset_index(drop=True)
+    neg_groups = group_info[group_info['y'] == 0].copy().reset_index(drop=True)
+
+    folds = [[] for _ in range(n_splits)]
+    for label_df in [pos_groups, neg_groups]:
+        for i, row in label_df.iterrows():
+            folds[i % n_splits].append(row.name)
+
+    # 空 fold 保护
+    for i in range(n_splits):
+        if not folds[i]:
+            non_empty = [k for k in range(n_splits) if len(folds[k]) > 0 and k != i]
+            if not non_empty:
+                raise ValueError(f"Cannot fill empty fold {i}: all other folds are empty")
+            largest_idx = max(non_empty, key=lambda k: len(folds[k]))
+            moved_group = folds[largest_idx].pop()
+            folds[i].append(moved_group)
+
+    splits = []
+    for i in range(n_splits):
+        test_groups = folds[i]
+        train_groups = [g for f in folds[:i] + folds[i+1:] for g in f]
+        test_idx = np.array([idx for g in test_groups for idx in group_info.loc[g, 'idx']])
+        train_idx = np.array([idx for g in train_groups for idx in group_info.loc[g, 'idx']])
+        if len(test_idx) == 0 or len(train_idx) == 0:
+            raise ValueError(f"Fold {i} has empty train or test set")
+        splits.append((train_idx, test_idx))
+    return splits
+
+
+def sample_params(param_space, rng):
+    """从参数空间中随机采样一组参数"""
+    params = {}
+    for k, v in param_space.items():
+        if isinstance(v, list):
+            params[k] = v[rng.randint(0, len(v))]
+        else:
+            params[k] = v
+    return params
+
+
+def evaluate_params(model_builder, params, X, y, groups, y_stratify, use_y_std=False, n_splits=5, random_state=42):
+    """对一组参数做 GroupKFold 评估，返回平均 Test R2 及 fold 级明细"""
+    n_subjects = len(np.unique(groups))
+    n_splits = min(n_splits, n_subjects // 2)
+    if n_splits < 2:
+        n_splits = 2
+
+    splits = group_stratified_kfold(groups, y_stratify, n_splits=n_splits, random_state=random_state)
+
+    train_r2_list, test_r2_list = [], []
+    test_corr_list, test_mape_list, test_rmse_list = [], [], []
+
+    for ti, vi in splits:
+        model = model_builder(params)
+        if use_y_std:
+            sx, sy = StandardScaler(), StandardScaler()
+            Xt = sx.fit_transform(X.iloc[ti])
+            Xv = sx.transform(X.iloc[vi])
+            yt = sy.fit_transform(y.iloc[ti].values.reshape(-1, 1)).ravel()
+            yv = y.iloc[vi].values
+            yt_raw = y.iloc[ti].values
+            model.fit(Xt, yt)
+            pred = sy.inverse_transform(model.predict(Xv).reshape(-1, 1)).ravel()
+            pred_train = sy.inverse_transform(model.predict(Xt).reshape(-1, 1)).ravel()
+        else:
+            model.fit(X.iloc[ti], y.iloc[ti])
+            pred = model.predict(X.iloc[vi])
+            pred_train = model.predict(X.iloc[ti])
+            yv = y.iloc[vi].values
+            yt_raw = y.iloc[ti].values
+
+        train_r2_list.append(r2_score(yt_raw, pred_train))
+        r2, corr, mape, rmse = calc_scores(yv, pred)
+        test_r2_list.append(r2)
+        test_corr_list.append(corr)
+        test_mape_list.append(mape)
+        test_rmse_list.append(rmse)
+
+    return {
+        'train_r2': np.mean(train_r2_list),
+        'test_r2': np.mean(test_r2_list),
+        'test_r2_std': np.std(test_r2_list),
+        'test_r2_folds': test_r2_list,
+        'test_corr': np.mean(test_corr_list),
+        'test_mape': np.mean(test_mape_list),
+        'test_rmse': np.mean(test_rmse_list),
+        'test_rmse_std': np.std(test_rmse_list),
+        'gap': np.mean(train_r2_list) - np.mean(test_r2_list)
+    }
+
+
+def tune_model(model_name, model_config, X, y, groups, y_stratify, n_iter=10, random_state=42):
+    """对一个模型做随机参数寻优"""
+    rng = np.random.RandomState(random_state)
+    best_score = -np.inf
+    best_params = None
+    best_metrics = None
+
+    all_trials = []
+
+    for i in range(n_iter):
+        params = sample_params(model_config['params'], rng)
+        metrics = evaluate_params(
+            model_config['model'], params, X, y, groups, y_stratify,
+            use_y_std=USE_Y_STD[model_name], random_state=random_state + i
+        )
+        metrics['params'] = params
+        all_trials.append(metrics)
+
+        if metrics['test_r2'] > best_score:
+            best_score = metrics['test_r2']
+            best_params = params
+            best_metrics = metrics
+
+    return best_params, best_metrics, all_trials
+
+
+# ============================================================
+# 主程序
+# ============================================================
+def main():
+    print("=" * 80)
+    print("SR0530 ML Hyperparameter Tuning with Local Structural Features")
+    print(f"Mode: min_quadrants={MIN_QUADRANTS} ({MODE_LABEL})")
+    print("Data groups: strict (69 eyes) vs lenient (71 eyes)")
+    print("Distances: 1.0-6.0 mm | Schemas: baseline + local | Models: 7")
+    print(f"Random search iterations per model: {N_ITER}")
+    print("=" * 80)
+
+    results = []
+    all_trials = []
+
+    for data_group, data_dir in DATA_DIRS.items():
+        print(f"\n{'='*80}")
+        print(f"Processing data group: {data_group.upper()}")
+        print(f"{'='*80}")
+
+        eye_to_subject = load_subject_mapping(data_dir)
+        all_data = load_distance_data(data_dir)
+        distances = sorted(all_data.keys())
+
+        for dist in distances:
+            print(f"\n--- Distance {dist:.1f} mm ---")
+            df = aggregate_distance(all_data[dist], eye_to_subject, min_quadrants=MIN_QUADRANTS)
+
+            for schema_name, feat_short in SCHEMA.items():
+                feat_full = [FEATURE_ALL[s] for s in feat_short]
+                df_sub = fill_na(df.copy(), feat_full)
+
+                X = df_sub[feat_full]
+                y = df_sub[TARGET_COL]
+                groups = df_sub['Real_Subject_ID'].values
+                y_strat = df_sub['Myopia'].values
+
+                n_subjects = len(np.unique(groups))
+                n_eyes = len(df_sub)
+
+                print(f"  [{schema_name}] N={n_eyes} eyes/{n_subjects} subjects")
+
+                if n_subjects < 4:
+                    print(f"    -> Skipping: too few subjects ({n_subjects})")
+                    continue
+
+                for model_name, model_config in PARAM_SPACE.items():
+                    print(f"    Tuning {model_name}...", end=' ', flush=True)
+                    best_params, best_metrics, trials = tune_model(
+                        model_name, model_config, X, y, groups, y_strat,
+                        n_iter=N_ITER, random_state=RANDOM_STATE
+                    )
+                    if best_metrics is None or best_params is None:
+                        print(f"    -> {model_name}: all iterations failed, skipping")
+                        continue
+                    print(f"Best R2={best_metrics['test_r2']:.3f}")
+
+                    results.append({
+                        'Data_Group': data_group,
+                        'Distance_mm': dist,
+                        'Schema': schema_name,
+                        'Model': model_name,
+                        'N_Eyes': n_eyes,
+                        'N_Subjects': n_subjects,
+                        'Best_Params': str(best_params),
+                        **best_metrics
+                    })
+
+                    for trial in trials:
+                        all_trials.append({
+                            'Data_Group': data_group,
+                            'Distance_mm': dist,
+                            'Schema': schema_name,
+                            'Model': model_name,
+                            'Params': str(trial['params']),
+                            'Train_R2': trial['train_r2'],
+                            'Test_R2': trial['test_r2'],
+                            'Test_R2_Std': trial['test_r2_std'],
+                            'Gap': trial['gap'],
+                            'Test_MAPE': trial['test_mape'],
+                            'Test_RMSE': trial['test_rmse'],
+                            'Test_RMSE_Std': trial['test_rmse_std']
+                        })
+
+    # 保存结果
+    df_results = pd.DataFrame(results)
+    df_trials = pd.DataFrame(all_trials)
+
+    results_csv = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Results_{MODE_LABEL}.csv')
+    trials_csv = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_AllTrials_{MODE_LABEL}.csv')
+
+    df_results.to_csv(results_csv, index=False, encoding='utf-8-sig')
+    df_trials.to_csv(trials_csv, index=False, encoding='utf-8-sig')
+    print(f"\nSaved: {results_csv}")
+    print(f"Saved: {trials_csv}")
+
+    # 生成可视化和报告
+    generate_visualizations(df_results, mode_label=MODE_LABEL)
+    generate_report(df_results, mode_label=MODE_LABEL)
+
+    print("\n" + "=" * 80)
+    print("Hyperparameter tuning with local features complete!")
+    print("=" * 80)
+
+
+# ============================================================
+# 可视化
+# ============================================================
+def generate_visualizations(df_results, mode_label='q1plus_local'):
+    """生成参数寻优结果可视化"""
+    # 1. 每个数据组的 best Test R2 热图（Distance vs Model，取最佳 Schema）
+    for data_group in df_results['Data_Group'].unique():
+        df_g = df_results[df_results['Data_Group'] == data_group]
+        best_per_dm = df_g.loc[df_g.groupby(['Distance_mm', 'Model'])['test_r2'].idxmax()]
+        pivot = best_per_dm.pivot(index='Distance_mm', columns='Model', values='test_r2')
+
+        fig, ax = plt.subplots(figsize=(14, 8))
+        vmax = max(0.5, np.nanmax(pivot.values))
+        vmin = min(-0.5, np.nanmin(pivot.values))
+        im = ax.imshow(pivot.values, aspect='auto', cmap='RdYlGn', vmin=vmin, vmax=vmax)
+        ax.set_xticks(np.arange(len(pivot.columns)))
+        ax.set_yticks(np.arange(len(pivot.index)))
+        ax.set_xticklabels(pivot.columns, rotation=45, ha='right')
+        ax.set_yticklabels([f"{d:.1f}" for d in pivot.index])
+        ax.set_xlabel('Model')
+        ax.set_ylabel('Distance (mm)')
+        ax.set_title(f'Best Test R² by Distance and Model ({data_group.upper()} data, {mode_label})')
+
+        for i in range(len(pivot.index)):
+            for j in range(len(pivot.columns)):
+                val = pivot.values[i, j]
+                if not np.isnan(val):
+                    text_color = 'white' if abs(val) > 0.25 else 'black'
+                    ax.text(j, i, f"{val:.2f}", ha='center', va='center', color=text_color, fontsize=8)
+
+        fig.colorbar(im, ax=ax, label='Test R²')
+        plt.tight_layout()
+        fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Heatmap_{data_group}_{mode_label}.png')
+        plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"  --> Saved: {fig_path}")
+
+    # 2. strict vs lenient 对比折线图（每个模型，取最佳 Schema）
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    axes = axes.flatten()
+
+    models = sorted(df_results['Model'].unique())
+    for idx, model_name in enumerate(models):
+        ax = axes[idx]
+        for data_group in ['strict', 'lenient']:
+            df_g = df_results[(df_results['Data_Group'] == data_group) & (df_results['Model'] == model_name)]
+            best_per_d = df_g.loc[df_g.groupby('Distance_mm')['test_r2'].idxmax()]
+            ax.plot(best_per_d['Distance_mm'], best_per_d['test_r2'], 'o-', label=data_group, linewidth=2, markersize=6)
+        ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
+        ax.set_xlabel('Distance (mm)')
+        ax.set_ylabel('Best Test R²')
+        ax.set_title(model_name)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+    for idx in range(len(models), len(axes)):
+        axes[idx].axis('off')
+
+    plt.suptitle(f'Strict vs Lenient: Best Test R² by Distance for Each Model ({mode_label})', fontsize=14, fontweight='bold')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Strict_vs_Lenient_{mode_label}.png')
+    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  --> Saved: {fig_path}")
+
+    # 3. 基线 vs 局部特征方案对比
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    baseline_schemas = ['A1_Biomechanical_Core', 'A2_Biomechanical_NoK', 'B_Clinical', 'C1_Combined']
+    local_schemas = [s for s in df_results['Schema'].unique() if s not in baseline_schemas]
+
+    for ax_idx, data_group in enumerate(['strict', 'lenient']):
+        ax = axes[ax_idx]
+        df_g = df_results[df_results['Data_Group'] == data_group]
+
+        # 每个距离的最佳基线
+        df_base = df_g[df_g['Schema'].isin(baseline_schemas)]
+        best_base = df_base.loc[df_base.groupby('Distance_mm')['test_r2'].idxmax()]
+        ax.plot(best_base['Distance_mm'], best_base['test_r2'], 's-', label='Best Baseline', linewidth=2.5, markersize=7)
+
+        # 每个距离的最佳局部特征方案
+        df_loc = df_g[df_g['Schema'].isin(local_schemas)]
+        best_loc = df_loc.loc[df_loc.groupby('Distance_mm')['test_r2'].idxmax()]
+        ax.plot(best_loc['Distance_mm'], best_loc['test_r2'], 'o-', label='Best Local-Feature', linewidth=2.5, markersize=7)
+
+        ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
+        ax.set_xlabel('Distance (mm)')
+        ax.set_ylabel('Best Test R²')
+        ax.set_title(f'{data_group.upper()}: Baseline vs Local Features')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+    plt.suptitle(f'Baseline vs Local Structural Features ({mode_label})', fontsize=14, fontweight='bold')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig_path = os.path.join(OUT_DIR, f'SR0530_HP_Tuning_Baseline_vs_Local_{mode_label}.png')
+    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(FIG_DIR, os.path.basename(fig_path)), dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  --> Saved: {fig_path}")
+
+
+# ============================================================
+# 报告生成
+# ============================================================
+def compute_t_ci(mean, std, n_folds=5, alpha=0.05):
+    """基于 fold 级均值与标准差计算 t 分布近似 95% CI。"""
+    if pd.isna(std) or n_folds < 2:
+        return np.nan, np.nan
+    se = std / np.sqrt(n_folds)
+    t_val = stats.t.ppf(1 - alpha / 2, df=n_folds - 1)
+    return mean - t_val * se, mean + t_val * se
+
+
+def make_comparison_table(df_results):
+    """
+    生成基线 vs 局部特征方案的对比表。
+    对每组 (Data_Group, Distance_mm, Model)，取最佳基线方案和最佳局部方案比较。
+    """
+    baseline_schemas = ['A1_Biomechanical_Core', 'A2_Biomechanical_NoK', 'B_Clinical', 'C1_Combined']
+    local_schemas = [s for s in df_results['Schema'].unique() if s not in baseline_schemas]
+
+    df_base = df_results[df_results['Schema'].isin(baseline_schemas)].copy()
+    df_loc = df_results[df_results['Schema'].isin(local_schemas)].copy()
+
+    rows = []
+    for (dg, dist, model), g_base in df_base.groupby(['Data_Group', 'Distance_mm', 'Model']):
+        g_loc = df_loc[(df_loc['Data_Group'] == dg) & (df_loc['Distance_mm'] == dist) & (df_loc['Model'] == model)]
+        if g_loc.empty:
+            continue
+        best_base = g_base.loc[g_base['test_r2'].idxmax()]
+        best_loc = g_loc.loc[g_loc['test_r2'].idxmax()]
+        delta_r2 = best_loc['test_r2'] - best_base['test_r2']
+        rows.append({
+            'Data_Group': dg,
+            'Distance_mm': dist,
+            'Model': model,
+            'Baseline_Schema': best_base['Schema'],
+            'Baseline_R2': best_base['test_r2'],
+            'Local_Schema': best_loc['Schema'],
+            'Local_R2': best_loc['test_r2'],
+            'Delta_R2': delta_r2,
+            'Improved': 'Yes' if delta_r2 > 0 else 'No'
+        })
+    return pd.DataFrame(rows)
+
+
+def generate_report(df_results, mode_label='q1plus_local'):
+    """生成 Markdown 报告"""
+    mode_desc = '≥1 象限可用（放宽，outer merge 取平均）+ 局部结构特征'
+
+    md = []
+    md.append(f"# SR0530 ML 超参数寻优报告：加入局部结构特征（{mode_desc}）\n\n")
+    md.append("> **目标**：在 q1plus 报告的正常 R² 方案基础上，加入局部结构特征，评估其对各距离、各模型预测能力的提升。\n\n")
+    md.append(f"> **搜索策略**：Random Search + GroupKFold by Subject，每模型 {N_ITER} 组参数\n\n")
+    md.append(f"> **象限策略**：{mode_desc}\n\n")
+    md.append("> **数据组**：`CleanDataRoi_strict/`（任意 ROI >7000 剔除）和 `CleanDataRoi_lenient/`（距离平均 >7000 剔除）\n\n")
+    md.append("> **置信区间说明**：Test R² 与 RMSE 后的 95% CI 基于 5-fold CV 的 fold-level 标准差，使用 t 分布近似（t₀.₀₂₅,₄ = 2.776）。\n\n")
+
+    md.append("---\n\n")
+
+    # 一、特征方案说明
+    md.append("## 一、特征方案说明\n\n")
+    md.append("### 基线方案\n\n")
+    md.append("| 方案 | 特征 | 说明 |\n")
+    md.append("|------|------|------|\n")
+    md.append("| A1_Biomechanical_Core | AL, Age, Gender | 生物力学核心 |\n")
+    md.append("| A2_Biomechanical_NoK | AL, ACD, Age, Gender | 生物力学（不含 K） |\n")
+    md.append("| B_Clinical | SE, Age, Gender | 临床方案 |\n")
+    md.append("| C1_Combined | SE, AL, Age, Gender | 联合方案 |\n\n")
+
+    md.append("### 局部结构特征\n\n")
+    md.append("| 特征 | 含义 |\n")
+    md.append("|------|------|\n")
+    md.append("| Cone spacing | 锥细胞间距 |\n")
+    md.append("| Cone dispersion | 锥细胞离散度 |\n")
+    md.append("| Cone regularity | 锥细胞规则性 |\n")
+    md.append("| Blood Vessel Ratio | 血管比例 |\n\n")
+
+    md.append("### 新增方案\n\n")
+    md.append("| 方案 | 特征 | 说明 |\n")
+    md.append("|------|------|------|\n")
+    md.append("| D1_Local_Core | Cone dispersion, Cone regularity | 仅局部核心特征 |\n")
+    md.append("| D2_Local_Full | Cone spacing, Cone dispersion, Cone regularity, Blood Vessel Ratio | 全部局部特征 |\n")
+    md.append("| E1_A1_Local_Core | A1 + Cone dispersion, Cone regularity | A1 加入局部核心特征 |\n")
+    md.append("| E2_A2_Local_Core | A2 + Cone dispersion, Cone regularity | A2 加入局部核心特征 |\n")
+    md.append("| E3_C1_Local_Core | C1 + Cone dispersion, Cone regularity | C1 加入局部核心特征 |\n")
+    md.append("| F1_A1_Local_Full | A1 + 全部局部特征 | A1 加入全部局部特征 |\n")
+    md.append("| F2_A2_Local_Full | A2 + 全部局部特征 | A2 加入全部局部特征 |\n")
+    md.append("| F3_C1_Local_Full | C1 + 全部局部特征 | C1 加入全部局部特征 |\n\n")
+
+    # 二、参数搜索空间
+    md.append("## 二、参数搜索空间\n\n")
+    md.append("| 模型 | 参数 | 搜索范围 |\n")
+    md.append("|------|------|---------|\n")
+    for model_name, config in PARAM_SPACE.items():
+        for param_name, values in config['params'].items():
+            value_str = ', '.join([str(v) for v in values])
+            md.append(f"| {model_name} | {param_name} | {value_str} |\n")
+
+    # 三、总体最佳配置
+    md.append("\n## 三、总体最佳配置\n\n")
+    best_row = df_results.loc[df_results['test_r2'].idxmax()]
+    r2_lo, r2_hi = compute_t_ci(best_row['test_r2'], best_row['test_r2_std'])
+    rmse_lo, rmse_hi = compute_t_ci(best_row['test_rmse'], best_row['test_rmse_std'])
+    md.append(f"- **数据组**：{best_row['Data_Group']}\n")
+    md.append(f"- **距离**：{best_row['Distance_mm']:.1f} mm\n")
+    md.append(f"- **方案**：{best_row['Schema']}\n")
+    md.append(f"- **模型**：{best_row['Model']}\n")
+    md.append(f"- **最佳 Test R²**：{best_row['test_r2']:.3f} [95% CI: {r2_lo:.3f}, {r2_hi:.3f}]\n")
+    md.append(f"- **最佳 RMSE**：{best_row['test_rmse']:.1f} [95% CI: {rmse_lo:.1f}, {rmse_hi:.1f}]\n")
+    md.append(f"- **最佳参数**：{best_row['Best_Params']}\n")
+    md.append(f"- **样本量**：{int(best_row['N_Eyes'])} 眼 / {int(best_row['N_Subjects'])} subjects\n\n")
+
+    # 四、基线 vs 局部特征：总体对比
+    md.append("## 四、基线 vs 局部特征：总体对比\n\n")
+    df_comp = make_comparison_table(df_results)
+    if not df_comp.empty:
+        summary = df_comp.groupby(['Data_Group', 'Model']).agg(
+            Mean_Delta_R2=('Delta_R2', 'mean'),
+            Max_Delta_R2=('Delta_R2', 'max'),
+            Min_Delta_R2=('Delta_R2', 'min'),
+            N_Improved=('Improved', lambda x: (x == 'Yes').sum()),
+            N_Total=('Delta_R2', 'size')
+        ).reset_index()
+        md.append("| 数据组 | 模型 | 平均 ΔR² | 最大 ΔR² | 最小 ΔR² | 改善距离数 / 总数 |\n")
+        md.append("|--------|------|---------|---------|---------|------------------|\n")
+        for _, row in summary.iterrows():
+            md.append(f"| {row['Data_Group']} | {row['Model']} | {row['Mean_Delta_R2']:.4f} | "
+                      f"{row['Max_Delta_R2']:.4f} | {row['Min_Delta_R2']:.4f} | "
+                      f"{int(row['N_Improved'])} / {int(row['N_Total'])} |\n")
+        md.append("\n")
+
+        # 按距离汇总
+        dist_summary = df_comp.groupby(['Data_Group', 'Distance_mm']).agg(
+            Mean_Delta_R2=('Delta_R2', 'mean'),
+            Max_Delta_R2=('Delta_R2', 'max'),
+            N_Improved=('Improved', lambda x: (x == 'Yes').sum()),
+            N_Total=('Delta_R2', 'size')
+        ).reset_index()
+        md.append("### 按距离汇总\n\n")
+        md.append("| 数据组 | 距离 (mm) | 平均 ΔR² | 最大 ΔR² | 改善模型数 / 总数 |\n")
+        md.append("|--------|----------|---------|---------|------------------|\n")
+        for _, row in dist_summary.iterrows():
+            md.append(f"| {row['Data_Group']} | {row['Distance_mm']:.1f} | {row['Mean_Delta_R2']:.4f} | "
+                      f"{row['Max_Delta_R2']:.4f} | {int(row['N_Improved'])} / {int(row['N_Total'])} |\n")
+        md.append("\n")
+    else:
+        md.append("*暂无可用对比数据。*\n\n")
+
+    # 五、每个数据组的最佳结果（按距离）
+    md.append("## 五、每个数据组的最佳结果（按距离）\n\n")
+    for data_group in ['strict', 'lenient']:
+        md.append(f"### {data_group.upper()} 数据组\n\n")
+        df_g = df_results[df_results['Data_Group'] == data_group]
+
+        md.append("| 距离 (mm) | 最佳方案 | 最佳模型 | Test R² (95% CI) | MAPE (%) | RMSE (95% CI) | Gap | 最佳参数 |\n")
+        md.append("|-----------|---------|---------|------------------|----------|----------------|-----|---------|\n")
+
+        for dist in sorted(df_g['Distance_mm'].unique()):
+            df_d = df_g[df_g['Distance_mm'] == dist]
+            best = df_d.loc[df_d['test_r2'].idxmax()]
+            r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
+            rmse_lo, rmse_hi = compute_t_ci(best['test_rmse'], best['test_rmse_std'])
+            md.append(f"| {best['Distance_mm']:.1f} | {best['Schema']} | {best['Model']} | "
+                      f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {best['test_mape']:.2f} | "
+                      f"{best['test_rmse']:.1f} [{rmse_lo:.1f}, {rmse_hi:.1f}] | "
+                      f"{best['gap']:.3f} | `{best['Best_Params']}` |\n")
+        md.append("\n")
+
+    # 六、每个模型在每个数据组的最佳结果
+    md.append("## 六、每个模型在每个数据组的最佳结果\n\n")
+    md.append("| 数据组 | 模型 | 最佳距离 | 最佳方案 | Test R² (95% CI) | MAPE (%) | 最佳参数 |\n")
+    md.append("|--------|------|---------|---------|------------------|----------|---------|\n")
+    for data_group in ['strict', 'lenient']:
+        df_g = df_results[df_results['Data_Group'] == data_group]
+        for model_name in sorted(df_g['Model'].unique()):
+            df_m = df_g[df_g['Model'] == model_name]
+            best = df_m.loc[df_m['test_r2'].idxmax()]
+            r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
+            md.append(f"| {data_group} | {model_name} | {best['Distance_mm']:.1f} mm | {best['Schema']} | "
+                      f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {best['test_mape']:.2f} | `{best['Best_Params']}` |\n")
+    md.append("\n")
+
+    # 七、每个特征方案的最佳结果
+    md.append("## 七、每个特征方案的最佳结果\n\n")
+    md.append("| 方案 | 数据组 | 最佳距离 | 最佳模型 | Test R² (95% CI) |\n")
+    md.append("|------|--------|---------|---------|------------------|\n")
+    for schema_name in df_results['Schema'].unique():
+        df_s = df_results[df_results['Schema'] == schema_name]
+        best = df_s.loc[df_s['test_r2'].idxmax()]
+        r2_lo, r2_hi = compute_t_ci(best['test_r2'], best['test_r2_std'])
+        md.append(f"| {schema_name} | {best['Data_Group']} | {best['Distance_mm']:.1f} mm | {best['Model']} | "
+                  f"{best['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] |\n")
+    md.append("\n")
+
+    # 八、详细结果表
+    md.append("## 八、全部详细结果\n\n")
+    md.append("| 数据组 | 距离 | 方案 | 模型 | N_Eyes | N_Subj | Train R² | Test R² (95% CI) | Corr | MAPE | RMSE (95% CI) | Gap | 最佳参数 |\n")
+    md.append("|--------|------|------|------|--------|--------|----------|------------------|------|------|----------------|-----|---------|\n")
+    for _, row in df_results.iterrows():
+        r2_lo, r2_hi = compute_t_ci(row['test_r2'], row['test_r2_std'])
+        rmse_lo, rmse_hi = compute_t_ci(row['test_rmse'], row['test_rmse_std'])
+        md.append(f"| {row['Data_Group']} | {row['Distance_mm']:.1f} | {row['Schema']} | {row['Model']} | "
+                  f"{int(row['N_Eyes'])} | {int(row['N_Subjects'])} | {row['train_r2']:.3f} | "
+                  f"{row['test_r2']:.3f} [{r2_lo:.3f}, {r2_hi:.3f}] | {row['test_corr']:.3f} | {row['test_mape']:.2f} | "
+                  f"{row['test_rmse']:.1f} [{rmse_lo:.1f}, {rmse_hi:.1f}] | {row['gap']:.3f} | `{row['Best_Params']}` |\n")
+
+    # 九、可视化
+    md.append("\n## 九、可视化\n\n")
+    md.append(f"### Strict 数据组：Distance × Model 热图 ({mode_label})\n\n")
+    md.append(f"![Strict Heatmap](FIG/SR0530_HP_Tuning_Heatmap_strict_{mode_label}.png)\n\n")
+    md.append(f"### Lenient 数据组：Distance × Model 热图 ({mode_label})\n\n")
+    md.append(f"![Lenient Heatmap](FIG/SR0530_HP_Tuning_Heatmap_lenient_{mode_label}.png)\n\n")
+    md.append(f"### Strict vs Lenient 各模型对比 ({mode_label})\n\n")
+    md.append(f"![Strict vs Lenient](FIG/SR0530_HP_Tuning_Strict_vs_Lenient_{mode_label}.png)\n\n")
+    md.append(f"### 基线 vs 局部特征方案对比 ({mode_label})\n\n")
+    md.append(f"![Baseline vs Local](FIG/SR0530_HP_Tuning_Baseline_vs_Local_{mode_label}.png)\n\n")
+
+    # 十、讨论
+    md.append("## 十、讨论\n\n")
+    md.append("1. **局部特征的增量价值**：通过对比基线方案与加入局部结构特征后的方案，可判断 Cone spacing、Cone dispersion、Cone regularity、Blood Vessel Ratio 是否能在 AL/ACD/SE/Age/Gender 之外提供额外预测信息。\n")
+    md.append("2. **最佳局部特征组合**：D1_Local_Core 仅使用 Cone dispersion 和 Cone regularity；D2_Local_Full 进一步加入 Cone spacing 和 Blood Vessel Ratio。若 D2 相比 D1 提升有限，说明后两个特征冗余或噪声较大。\n")
+    md.append("3. **模型特异性**：树模型（Random Forest、XGBoost）可能更善于捕捉局部特征的非线性交互；线性模型（Lasso、Ridge、ElasticNet）可反映特征的可加性贡献。\n")
+    md.append("4. **距离依赖性**：局部结构特征对中心凹附近（1.0-2.0 mm）与周边（5.0-6.0 mm）的贡献可能不同，需结合结果按距离讨论。\n")
+    md.append("5. **局限**：本分析沿用 q1plus 的 ≥1 象限平均策略；若局部特征在象限间差异较大，跨象限平均可能稀释其信号。\n\n")
+
+    md.append("---\n\n")
+    md.append("*Report generated automatically by SR_ML_hyperparameter_tuning_with_local_features.py*\n")
+
+    md_path = os.path.join(REPORT_DIR, f'SR0530_ML_Hyperparameter_Tuning_{mode_label}_Report.md')
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write(''.join(md))
+    print(f"  --> Report: {md_path}")
+
+
+if __name__ == '__main__':
+    main()
