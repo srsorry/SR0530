@@ -12,6 +12,18 @@
 
 ---
 
+## ⚠️ 重要稳健性修正说明
+
+本报告中的结果来自**单次 5-fold GroupKFold** 调优。后续使用 **5 repeats × 5-fold GroupKFold** 重复交叉验证重新评估后发现：此前单 CV 选出的最佳性能存在显著选择偏倚，R² 被高估，CI 过窄。
+
+- 此前报告最佳：`C1_Combined_K + Lasso` @ 1.5 mm，Test R² = **0.612** [95% CI: 0.359, 0.864]
+- 重复 CV 稳健估计（同方案/距离）：`C1_Combined_K + ElasticNet`，Mean Test R² = **0.368** [95% CI: 0.237, 0.498]
+- 重复 CV 全距离最佳：`C1_Combined_ALK + ElasticNet` @ 1.5 mm，Mean Test R² = **0.395** [95% CI: 0.274, 0.515]
+
+因此，**0.612 不宜在论文中作为最终结果直接引用**。建议改用重复 CV 稳健估计，并参考 `report/SR0530_ML_Hyperparameter_Tuning_robust_repeatedCV_all_distances_Report.md`。
+
+---
+
 ## 一、纳入分析的特征方案
 
 本次分析共比较 4 个加入 K 的方案：
@@ -157,6 +169,8 @@
 
 ## 八、结论与论文建议
 
+### 8.1 单 CV 结论（原始结果，仅供参考）
+
 1. **最佳方案推荐使用 C1_Combined_K（SE + AL + Age + Gender + K）**：在 lenient 数据组中，该方案在 1.5 mm 处取得最高 Test R² = 0.612，且在线性模型（Lasso / ElasticNet / Ridge）中表现稳定，Gap 小、泛化可靠。
 
 2. **K 的加入带来一致但 modest 的提升**：在 lenient 数据组中，A2_Biomechanical_WithK 平均 ΔR² = +0.076，A1_Biomechanical_Core_K = +0.034，C1_Combined_K = +0.010，B_Clinical_K = +0.014。说明 K 对生物力学方案贡献最大。
@@ -165,14 +179,23 @@
 
 4. **距离模式**：最佳预测能力出现在 **1.5-2.0 mm** 偏心距；随距离增加（>4 mm），R² 逐渐下降，MAPE 上升，提示周边视网膜密度变异性增大或样本减少。
 
-5. **最终推荐用于论文的 71 眼方案**：
-   - **特征**：Spherical equivalent refraction (D) + Axial length (mm) + Age + Gender + Corneal curvature (mm)
-   - **方案名**：C1_Combined_K
-   - **模型**：Lasso（或 ElasticNet / Ridge 作为稳健性检验）
-   - **最佳距离**：1.5 mm
-   - **性能**：Test R² = 0.612 [95% CI: 0.359, 0.864]，RMSE = 447.8，MAPE = 8.07%
+### 8.2 稳健性修正后的论文建议
 
-6. **局限**：R² 最高约 0.61，说明全局眼形态参数只能解释局部锥细胞密度约 60% 的变异；其余变异可能来自局部视网膜结构、测量噪声或未采集因素。
+> 基于后续 **5 repeats × 5-fold** 重复 CV 结果，单 CV 的 0.612 被高估，不建议直接引用。
+
+1. **推荐主方案**：`C1_Combined_ALK`（SE + AL + Age + Gender + AL/K）+ `ElasticNet`
+   - **最佳距离**：1.5 mm
+   - **稳健 Mean Test R²**：0.395 [95% CI: 0.274, 0.515]
+   - **最佳参数**：`alpha=1.0`, `l1_ratio=0.7`
+
+2. **替代方案**：
+   - `A2_Biomechanical_K_ALK + ElasticNet` @ 1.5 mm，Mean R² = 0.393 [0.279, 0.508]
+   - `C1_Combined_K + ElasticNet` @ 1.5 mm，Mean R² = 0.368 [0.237, 0.498]
+   - 上述结果一致表明：在 lenient 数据组中，**1.5 mm** 仍是最有预测力的偏心率，但可解释变异约为 **30–40%**，而非 60%。
+
+3. **模型选择建议**：线性模型（ElasticNet / Ridge / Lasso）在重复 CV 下仍是最稳健选择；树模型和神经网络的 Gap 普遍更大，不推荐作为主模型。
+
+4. **局限**：R² 最高约 0.40，说明全局眼形态参数只能解释局部锥细胞密度约 **30–40%** 的变异；其余变异可能来自局部视网膜结构、测量噪声或小样本导致的高方差。
 
 ---
 

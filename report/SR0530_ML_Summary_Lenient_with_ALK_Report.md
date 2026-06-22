@@ -15,6 +15,17 @@
 
 ---
 
+## ⚠️ 重要稳健性修正说明
+
+本报告中的结果来自**单次 5-fold GroupKFold** 调优。后续使用 **5 repeats × 5-fold GroupKFold** 重复交叉验证重新评估后发现：单 CV 选出的 `C1_Combined_K + Lasso` 在 1.5 mm 的 Test R² = **0.612** 存在显著选择偏倚，CI 过窄，实际稳健性能远低于该值。
+
+- 重复 CV 下同方案/距离稳健估计：`C1_Combined_K + ElasticNet` @ 1.5 mm，Mean Test R² = **0.368** [95% CI: 0.237, 0.498]
+- 重复 CV 全距离稳健最佳：`C1_Combined_ALK + ElasticNet` @ 1.5 mm，Mean Test R² = **0.395** [95% CI: 0.274, 0.515]
+
+因此，**0.612 不宜在论文中作为最终结果直接引用**。建议改用重复 CV 稳健估计，并参考 `report/SR0530_ML_Hyperparameter_Tuning_robust_repeatedCV_all_distances_Report.md`。
+
+---
+
 ## 一、纳入比较的四种特征用法
 
 每个基础方案下比较 4 种版本：
@@ -168,25 +179,37 @@
 
 4. **线性模型依然最稳健**：Lasso、ElasticNet、Ridge 在各方案中平均表现最佳，且 Gap 较小。
 
-## 八、论文推荐方案
+## 八、论文推荐方案（已根据重复 CV 修正）
+
+> 基于后续 **5 repeats × 5-fold GroupKFold** 重复 CV，单 CV 的 0.611–0.612 已被证实高估，不建议在论文中直接引用。以下推荐已替换为稳健估计。
 
 ### 推荐方案 A（综合性能最优）
 - **方案**：C1_Combined_ALK（SE + AL + Age + Gender + AL/K）
-- **模型**：Lasso
+- **模型**：ElasticNet
 - **最佳距离**：1.5 mm
-- **性能**：Test R² = 0.611 [95% CI: 0.356, 0.867]，RMSE ≈ 449.2，MAPE ≈ 8.10%
-- **理由**：与 C1_Combined_K 性能持平，但 AL/K 是更有生理意义的复合指标（眼轴-角膜比值），可统一解释近视与角膜曲率的交互作用。
+- **稳健性能**：Mean Test R² = 0.395 [95% CI: 0.274, 0.515]
+- **最佳参数**：`alpha=1.0`, `l1_ratio=0.7`
+- **理由**：在重复 CV 下仍为全距离最佳，且 AL/K 是更有生理意义的复合指标（眼轴-角膜比值），可统一解释近视与角膜曲率的交互作用。
 
 ### 推荐方案 B（纯生物力学，模型更简洁）
-- **方案**：A2_Biomechanical_ALK（AL + ACD + Age + Gender + AL/K）
-- **模型**：Lasso / Ridge
+- **方案**：A2_Biomechanical_K_ALK（AL + ACD + Age + Gender + K + AL/K）
+- **模型**：ElasticNet
 - **最佳距离**：1.5 mm
-- **性能**：Test R² ≈ 0.586
+- **稳健性能**：Mean Test R² = 0.393 [95% CI: 0.279, 0.508]
+- **最佳参数**：`alpha=1.0`, `l1_ratio=0.7`
 - **理由**：不依赖 SE，完全由可测量的眼球形态参数构成，适合讨论眼形态对视网膜细胞密度的直接影响。
 
+### 替代方案 C（保留 K 的版本）
+- **方案**：C1_Combined_K（SE + AL + Age + Gender + K）
+- **模型**：ElasticNet
+- **最佳距离**：1.5 mm
+- **稳健性能**：Mean Test R² = 0.368 [95% CI: 0.237, 0.498]
+- **最佳参数**：`alpha=1.0`, `l1_ratio=0.7`
+
 ### 稳健性建议
-- 在论文中同时报告 C1_Combined_K 与 C1_Combined_ALK，说明两者结果一致。
-- 若审稿人质疑 K 与 AL 的共线性，可改用 AL/K 作为单一复合指标，并展示 A2_Biomechanical_ALK 的稳健表现。
+- 在论文中同时报告 C1_Combined_ALK 与 C1_Combined_K，说明两者稳健结果在同一量级，AL/K 与 K 可互换。
+- 若审稿人质疑 K 与 AL 的共线性，可改用 AL/K 作为单一复合指标，并展示 A2_Biomechanical_K_ALK / A2_Biomechanical_ALK 的稳健表现。
+- 明确指出所有 R² 基于重复 CV，以避免单 CV 选择偏倚。
 
 ---
 
