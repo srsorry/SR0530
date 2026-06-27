@@ -157,13 +157,16 @@ def main():
     md.append(r"| **Current LMM** | `y ~ covariates + Eye + (1 | Subject)` | 在 ICC(3,1) 基础上进一步控制协变量 | 评估“控制 AL 等因素后”的受试者间一致性 |")
     md.append('')
 
-    md.append('## 二、各距离 ICC 比较\n')
-    md.append('| 距离 (mm) | 眼数 | 受试者数 | ICC(1,1) | ICC(3,1) | Current ICC |')
-    md.append('|-----------|------|---------|----------|----------|-------------|')
+    md.append('## 二、各距离 ICC 与方差分解\n')
+    md.append('| 距离 (mm) | ICC(1,1) | σ²_Subject | σ²_Residual | ICC(3,1) | σ²_Subject | σ²_Residual | Current ICC | σ²_Subject | σ²_Residual |')
+    md.append('|-----------|----------|------------|-------------|----------|------------|-------------|-------------|------------|-------------|')
     for _, row in df_res.iterrows():
-        md.append(f"| {row['Distance']:.1f} | {int(row['N_eyes'])} | {int(row['N_subjects'])} | "
-                  f"{row['ICC_1_1']:.3f} | {row['ICC_3_1']:.3f} | {row['ICC_Current']:.3f} |")
+        md.append(f"| {row['Distance']:.1f} | "
+                  f"{row['ICC_1_1']:.3f} | {row['VarSubject_1_1']:.4f} | {row['VarResidual_1_1']:.4f} | "
+                  f"{row['ICC_3_1']:.3f} | {row['VarSubject_3_1']:.4f} | {row['VarResidual_3_1']:.4f} | "
+                  f"{row['ICC_Current']:.3f} | {row['VarSubject_Current']:.4f} | {row['VarResidual_Current']:.4f} |")
     md.append('')
+    md.append('> 注：σ²_Subject 为受试者随机截距方差，σ²_Residual 为残差方差；两者单位均为 (cones/deg²)²。\n')
 
     md.append('## 三、关键发现\n')
     md.append('1. **ICC(1,1) 与 ICC(3,1) 数值接近**：')
@@ -179,10 +182,13 @@ def main():
     md.append('   - 若讨论“控制眼形态后仍由受试者解释的变异比例”，报告 **Current ICC**。')
     md.append('   - 不建议把 Current ICC 与 ICC(1,1) 混为一谈。\n')
 
-    md.append('## 四、完整数据\n')
+    md.append('## 四、完整数据（含方差分量）\n')
     md.append(f'CSV：`genData/sum/{os.path.basename(CSV_PATH)}`\n')
-    md.append(df_res[['Distance', 'N_eyes', 'N_subjects', 'ICC_1_1', 'ICC_3_1', 'ICC_Current']]
-              .to_markdown(index=False, floatfmt='.3f'))
+    full_cols = ['Distance', 'N_eyes', 'N_subjects',
+                 'ICC_1_1', 'VarSubject_1_1', 'VarResidual_1_1',
+                 'ICC_3_1', 'VarSubject_3_1', 'VarResidual_3_1',
+                 'ICC_Current', 'VarSubject_Current', 'VarResidual_Current']
+    md.append(df_res[full_cols].to_markdown(index=False, floatfmt='.4f'))
     md.append('')
 
     md.append('---\n')
