@@ -52,9 +52,9 @@ SEQ = 'A'
 FUNC_NAME = 'Best_RobustLinear_Diagnostics'
 REPORT_PATH = os.path.join(REPORT_DIR, f'{DATE_PREFIX}_{SEQ}_{FUNC_NAME}_Report.md')
 
-LC_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_Learning_Curves.png')
-SHAP_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_SHAP_Summary.png')
-OBS_PRED_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_Observed_vs_Predicted.png')
+LC_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_Learning_Curves.pdf')
+SHAP_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_SHAP_Summary.pdf')
+OBS_PRED_PLOT = os.path.join(FIG_DIR, f'{DATE_PREFIX}_{SEQ}_Observed_vs_Predicted.pdf')
 
 # 最佳配置（来自 report/SR0530_ALK_10fold_Final_Tuning_Report.md）
 BEST_CONFIG = {

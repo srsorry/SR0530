@@ -53,11 +53,11 @@
 
 > 学习曲线基于与最佳 CV 相同的 10-fold GroupKFold by Subject 拆分（seed = 43)，对每个训练集大小计算训练/验证 R² 和 RMSE 的均值 ± 标准差。
 
-![Learning Curves](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_Learning_Curves.png)
+![Learning Curves](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_Learning_Curves.pdf)
 
 ## 四、Observed vs Predicted
 
-![Observed vs Predicted](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_Observed_vs_Predicted.png)
+![Observed vs Predicted](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_Observed_vs_Predicted.pdf)
 
 ## 五、SHAP 特征重要性（Cross-validated，Method B）
 
@@ -69,7 +69,7 @@
 | Spherical equivalent refraction (D) |       58.3231 |
 | Age                                 |       28.1329 |
 
-![SHAP Summary](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_SHAP_Summary.png)
+![SHAP Summary](FIG/SR0627_A_Best_RobustLinear_Diagnostics/SR0627_A_SHAP_Summary.pdf)
 
 ---
 
