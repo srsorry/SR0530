@@ -57,10 +57,32 @@ def load_1mm_best():
     return df.loc[idx]
 
 
+def load_alk_comparison():
+    """读取 lenient AL/K 与 K 结果，返回 C1_Combined 各变型在 1.5 mm 的最佳行。"""
+    alk_path = os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results_lenient_ALK.csv')
+    k_path = os.path.join(OUT_DIR, 'SR0530_HP_Tuning_Results_q1plus_K.csv')
+    out = {}
+    if os.path.exists(alk_path):
+        df_alk = pd.read_csv(alk_path)
+        df_alk_d = df_alk[(df_alk['Data_Group'] == 'lenient') & (df_alk['Distance_mm'] == 1.5)]
+        for schema in ['C1_Combined_ALK', 'C1_Combined_K_ALK']:
+            df_s = df_alk_d[df_alk_d['Schema'] == schema]
+            if not df_s.empty:
+                out[schema] = df_s.loc[df_s['test_r2'].idxmax()]
+    if os.path.exists(k_path):
+        df_k = pd.read_csv(k_path)
+        df_k_d = df_k[(df_k['Data_Group'] == 'lenient') & (df_k['Distance_mm'] == 1.5)]
+        df_s = df_k_d[df_k_d['Schema'] == 'C1_Combined_K']
+        if not df_s.empty:
+            out['C1_Combined_K'] = df_s.loc[df_s['test_r2'].idxmax()]
+    return out
+
+
 def main():
     lmm_best = load_lmm_best()
     ml_best, df_ml = load_ml_best()
     mm1_best = load_1mm_best()
+    alk_cmp = load_alk_comparison()
 
     md = []
     md.append("# SR0530 综合分析总结报告\n\n")
@@ -90,10 +112,30 @@ def main():
         md.append(f"  - MAPE = {row['test_mape']:.2f}%\n")
     md.append("\n")
 
+    # AL/K 替代 K 的验证
+    md.append("### 1.3 AL/K 替代 K 的验证（lenient）\n\n")
+    if all(k in alk_cmp for k in ['C1_Combined_ALK', 'C1_Combined_K', 'C1_Combined_K_ALK']):
+        alk = alk_cmp['C1_Combined_ALK']
+        k = alk_cmp['C1_Combined_K']
+        k_alk = alk_cmp['C1_Combined_K_ALK']
+        alk_r2_lo, alk_r2_hi = compute_t_ci(alk['test_r2'], alk['test_r2_std'])
+        k_r2_lo, k_r2_hi = compute_t_ci(k['test_r2'], k['test_r2_std'])
+        kalk_r2_lo, kalk_r2_hi = compute_t_ci(k_alk['test_r2'], k_alk['test_r2_std'])
+        md.append("- **补充分析**：在 lenient 数据组上进一步比较了用 **AL/K（眼轴-角膜曲率比值）** 替代或叠加 **K（角膜曲率）** 的效果。\n")
+        md.append(f"- **关键发现**：**C1_Combined_ALK** 在 **1.5 mm** 处使用 **{alk['Model']}** 即可达到 **Test R² = {alk['test_r2']:.3f}**，与 C1_Combined_K 的 {k['test_r2']:.3f} 几乎相同；C1_Combined_K_ALK 同样为 {k_alk['test_r2']:.3f}。\n")
+        md.append(f"  - **C1_Combined_ALK**：SE + AL + Age + Gender + AL/K，Test R² = {alk['test_r2']:.3f} [95% CI: {alk_r2_lo:.3f}, {alk_r2_hi:.3f}]\n")
+        md.append(f"  - **C1_Combined_K**：SE + AL + Age + Gender + K，Test R² = {k['test_r2']:.3f} [95% CI: {k_r2_lo:.3f}, {k_r2_hi:.3f}]\n")
+        md.append(f"  - **C1_Combined_K_ALK**：SE + AL + Age + Gender + K + AL/K，Test R² = {k_alk['test_r2']:.3f} [95% CI: {kalk_r2_lo:.3f}, {kalk_r2_hi:.3f}]\n")
+        md.append("- **判读**：在已包含 AL 的 C1_Combined 方案中，K 与 AL/K 可互换，同时纳入两者并未提升性能，提示信息冗余。AL/K 作为单一复合指标更具生理意义（同时概括眼轴与角膜曲率的交互作用）。\n")
+        md.append("- **稳健性提醒**：上述 0.611–0.612 来自单次 5-fold CV，存在选择偏倚；后续 **5 repeats × 5-fold GroupKFold** 重复 CV 给出 C1_Combined_ALK 的稳健估计为 **Test R² = 0.395** [95% CI: 0.274, 0.515]，建议在论文中引用稳健估计。\n")
+    else:
+        md.append("- AL/K 对比结果尚未生成。\n")
+    md.append("\n")
+
     # 全样本最佳模型
     overall_idx = df_ml['test_r2'].idxmax()
     overall = df_ml.loc[overall_idx]
-    md.append("### 1.3 全样本最佳机器学习模型\n\n")
+    md.append("### 1.4 全样本最佳机器学习模型\n\n")
     md.append(f"- **数据组**：{overall['Data_Group']}\n")
     md.append(f"- **距离**：{overall['Distance_mm']:.1f} mm\n")
     md.append(f"- **方案**：{overall['Schema']}\n")
@@ -107,7 +149,7 @@ def main():
 
     # 1mm final 小结
     if mm1_best is not None:
-        md.append("### 1.4 1.0 mm 精细调优小结\n\n")
+        md.append("### 1.5 1.0 mm 精细调优小结\n\n")
         r2_lo, r2_hi = compute_t_ci(mm1_best['Fine_Test_R2'], mm1_best['Fine_Test_R2_Std'])
         rmse_lo, rmse_hi = compute_t_ci(mm1_best['Fine_Test_RMSE'], mm1_best['Fine_Test_RMSE_Std'])
         md.append(f"- **最稳定配置**：{mm1_best['Data_Group']} + {mm1_best['Schema']} + {mm1_best['Model']}\n")
@@ -140,12 +182,16 @@ def main():
     md.append("   - 其他特征（ACD、Age、SE、Gender）的贡献相对较小，但在特定模型/方案中仍有稳定信号。\n\n")
     md.append("4. **数据组差异**：\n")
     md.append("   - strict 数据组剔除局部 ROI 异常值，结果更稳健；lenient 数据组保留更多样本，但可能混入异常。\n\n")
+    md.append("5. **AL/K 作为 K 的替代指标**：\n")
+    md.append("   - 在 lenient 的 C1_Combined 方案中，AL/K 与 K 可达到几乎相同的峰值 R²（~0.611 vs ~0.612），且 K + AL/K 叠加无额外增益，说明两者信息高度冗余。\n")
+    md.append("   - 若希望减少共线性、统一眼形态解释，可优先使用 AL/K 替代 K；但需在论文中报告重复 CV 稳健估计，避免单次 CV 的高估。\n\n")
 
     # 四、结论与建议
     md.append("## 四、结论与建议\n\n")
     md.append(f"1. **推荐研究靶点**：综合 LMM 敏感性与 ML 预测性能，**{overall['Distance_mm']:.1f} mm** 是当前数据下最值得深入分析的距离。\n")
     md.append(f"2. **推荐模型**：**{overall['Model']}**（方案 {overall['Schema']}，{overall['Data_Group']} 数据），Test R² = {overall['test_r2']:.3f}。\n")
-    md.append("3. **后续方向**：\n")
+    md.append("3. **AL/K 替代方案（lenient）**：若使用 lenient 数据组并希望在 C1_Combined 方案中以 AL/K 替代 K，**C1_Combined_ALK + Lasso @ 1.5 mm** 可达到与 C1_Combined_K 几乎相同的单次 CV 性能（Test R² ≈ 0.611 vs 0.612），但论文引用应使用重复 CV 稳健估计（≈ 0.395）。\n")
+    md.append("4. **后续方向**：\n")
     md.append("   - 在推荐距离上进一步扩大样本量，验证学习曲线显示的潜在提升空间。\n")
     md.append("   - 探索 AL 与密度关系的非线性形式（如样条、分段回归），以解释 LMM 与 ML 峰值可能存在的错位。\n")
     md.append("   - 若需与 linear density（cones/mm²）口径对照，可补充 linear density 的 LMM 与 ML 分析。\n\n")

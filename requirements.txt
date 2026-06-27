@@ -1,0 +1,16 @@
+# SR0530 Python dependencies
+# Tested with Python 3.13.5 (Anaconda)
+# Install: pip install -r requirements.txt
+
+numpy>=2.1.3
+pandas>=2.2.3
+scipy>=1.15.3
+matplotlib>=3.10.0
+seaborn>=0.13.2
+scikit-learn>=1.6.1
+xgboost>=3.2.0
+shap>=0.52.0
+statsmodels>=0.14.4
+patsy>=1.0.1
+joblib>=1.4.2
+threadpoolctl>=3.5.0

@@ -24,7 +24,17 @@
   - RMSE = 491.4 [95% CI: 259.9, 722.9]
   - MAPE = 9.27%
 
-### 1.3 全样本最佳机器学习模型
+### 1.3 AL/K 替代 K 的验证（lenient）
+
+- **补充分析**：在 lenient 数据组上进一步比较了用 **AL/K（眼轴-角膜曲率比值）** 替代或叠加 **K（角膜曲率）** 的效果。
+- **关键发现**：**C1_Combined_ALK** 在 **1.5 mm** 处使用 **Lasso** 即可达到 **Test R² = 0.611**，与 C1_Combined_K 的 0.612 几乎相同；C1_Combined_K_ALK 同样为 0.611。
+  - **C1_Combined_ALK**：SE + AL + Age + Gender + AL/K，Test R² = 0.611 [95% CI: 0.358, 0.864]
+  - **C1_Combined_K**：SE + AL + Age + Gender + K，Test R² = 0.612 [95% CI: 0.359, 0.864]
+  - **C1_Combined_K_ALK**：SE + AL + Age + Gender + K + AL/K，Test R² = 0.611 [95% CI: 0.358, 0.864]
+- **判读**：在已包含 AL 的 C1_Combined 方案中，K 与 AL/K 可互换，同时纳入两者并未提升性能，提示信息冗余。AL/K 作为单一复合指标更具生理意义（同时概括眼轴与角膜曲率的交互作用）。
+- **稳健性提醒**：上述 0.611–0.612 来自单次 5-fold CV，存在选择偏倚；后续 **5 repeats × 5-fold GroupKFold** 重复 CV 给出 C1_Combined_ALK 的稳健估计为 **Test R² = 0.395** [95% CI: 0.274, 0.515]，建议在论文中引用稳健估计。
+
+### 1.4 全样本最佳机器学习模型
 
 - **数据组**：strict
 - **距离**：1.5 mm
@@ -35,7 +45,7 @@
 - **MAPE**：8.32%
 - **最佳参数**：{'n_estimators': 100, 'max_depth': 3, 'min_samples_split': 5, 'min_samples_leaf': 1}
 
-### 1.4 1.0 mm 精细调优小结
+### 1.5 1.0 mm 精细调优小结
 
 - **最稳定配置**：strict + C1_Combined + Neural_Network
 - **Fine Test R²**：0.340 [95% CI: 0.259, 0.420]
@@ -73,11 +83,16 @@
 4. **数据组差异**：
    - strict 数据组剔除局部 ROI 异常值，结果更稳健；lenient 数据组保留更多样本，但可能混入异常。
 
+5. **AL/K 作为 K 的替代指标**：
+   - 在 lenient 的 C1_Combined 方案中，AL/K 与 K 可达到几乎相同的峰值 R²（~0.611 vs ~0.612），且 K + AL/K 叠加无额外增益，说明两者信息高度冗余。
+   - 若希望减少共线性、统一眼形态解释，可优先使用 AL/K 替代 K；但需在论文中报告重复 CV 稳健估计，避免单次 CV 的高估。
+
 ## 四、结论与建议
 
 1. **推荐研究靶点**：综合 LMM 敏感性与 ML 预测性能，**1.5 mm** 是当前数据下最值得深入分析的距离。
 2. **推荐模型**：**Random_Forest**（方案 A2_Biomechanical_NoK，strict 数据），Test R² = 0.557。
-3. **后续方向**：
+3. **AL/K 替代方案（lenient）**：若使用 lenient 数据组并希望在 C1_Combined 方案中以 AL/K 替代 K，**C1_Combined_ALK + Lasso @ 1.5 mm** 可达到与 C1_Combined_K 几乎相同的单次 CV 性能（Test R² ≈ 0.611 vs 0.612），但论文引用应使用重复 CV 稳健估计（≈ 0.395）。
+4. **后续方向**：
    - 在推荐距离上进一步扩大样本量，验证学习曲线显示的潜在提升空间。
    - 探索 AL 与密度关系的非线性形式（如样条、分段回归），以解释 LMM 与 ML 峰值可能存在的错位。
    - 若需与 linear density（cones/mm²）口径对照，可补充 linear density 的 LMM 与 ML 分析。
