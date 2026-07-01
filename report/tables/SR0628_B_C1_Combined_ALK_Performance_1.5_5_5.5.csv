@@ -1,28 +1,28 @@
-﻿Distance_mm,Schema,Model,Test_R2,Test_RMSE,Test_MSE,Gap,Best_Params
-1.5,C1_Combined_ALK,Robust_Linear_Regression,0.504,458.0,209764.0,0.081,"{'epsilon': 1.8, 'alpha': 0.05}"
-1.5,C1_Combined_ALK,Neural_Network,0.423,382.4,146229.75999999998,0.219,"{'hidden_layer_sizes': (100, 50), 'alpha': 0.1, 'learning_rate_init': 0.001}"
-1.5,C1_Combined_ALK,SVM,0.417,403.9,163135.21,0.223,"{'C': 5000, 'epsilon': 200, 'gamma': 0.005}"
-1.5,C1_Combined_ALK,Ridge,0.399,389.2,151476.63999999998,0.222,{'alpha': 0.5}
-1.5,C1_Combined_ALK,ElasticNet,0.394,391.2,153037.44,0.227,"{'alpha': 0.005, 'l1_ratio': 0.8}"
-1.5,C1_Combined_ALK,Lasso,0.393,391.5,153272.25,0.228,{'alpha': 0.1}
-1.5,C1_Combined_ALK,Random_Forest,0.371,410.6,168592.36000000002,0.491,"{'n_estimators': 100, 'max_depth': 3, 'min_samples_split': 2, 'min_samples_leaf': 2}"
-1.5,C1_Combined_ALK,XGBoost,0.359,428.3,183440.89,0.41,"{'learning_rate': 0.03, 'max_depth': 2, 'n_estimators': 50, 'reg_alpha': 0.5, 'reg_lambda': 0.1}"
-1.5,C1_Combined_ALK,Multiple_Linear_Regression,-0.4363619443918438,469.3603068942665,220299.09768788004,0.9345191072707215,{}
-5.0,C1_Combined_ALK,SVM,0.039,635.1,403352.01,0.316,"{'C': 500, 'epsilon': 200, 'gamma': 0.01}"
-5.0,C1_Combined_ALK,Robust_Linear_Regression,-0.078,605.5,366630.25,0.275,"{'epsilon': 1.2, 'alpha': 0.1}"
-5.0,C1_Combined_ALK,Ridge,-0.095,595.1,354144.01,0.453,{'alpha': 100.0}
-5.0,C1_Combined_ALK,Neural_Network,-0.17,614.5,377610.25,0.744,"{'hidden_layer_sizes': (40,), 'alpha': 0.3, 'learning_rate_init': 0.0005}"
-5.0,C1_Combined_ALK,ElasticNet,-0.277,558.4,311810.56,0.626,"{'alpha': 1.0, 'l1_ratio': 0.05}"
-5.0,C1_Combined_ALK,XGBoost,-0.287,569.5,324330.25,0.895,"{'learning_rate': 0.03, 'max_depth': 3, 'n_estimators': 30, 'reg_alpha': 0.5, 'reg_lambda': 1.0}"
-5.0,C1_Combined_ALK,Random_Forest,-0.293,522.6,273110.76,0.973,"{'n_estimators': 300, 'max_depth': 2, 'min_samples_split': 2, 'min_samples_leaf': 4}"
-5.0,C1_Combined_ALK,Lasso,-0.42,606.2,367478.44000000006,0.922,{'alpha': 0.003}
-5.0,C1_Combined_ALK,Multiple_Linear_Regression,-3.537876884930217,681.8630157989945,464937.17231449985,3.8928574988037505,{}
-5.5,C1_Combined_ALK,SVM,0.145,624.5,390000.25,0.235,"{'C': 500, 'epsilon': 200, 'gamma': 0.01}"
-5.5,C1_Combined_ALK,Robust_Linear_Regression,0.078,635.6,403987.36000000004,0.347,"{'epsilon': 1.0, 'alpha': 0.0005}"
-5.5,C1_Combined_ALK,Neural_Network,-0.032,605.7,366872.49000000005,0.64,"{'hidden_layer_sizes': (40,), 'alpha': 0.3, 'learning_rate_init': 0.0005}"
-5.5,C1_Combined_ALK,Ridge,-0.114,617.6,381429.76,0.468,{'alpha': 100.0}
-5.5,C1_Combined_ALK,ElasticNet,-0.132,601.7,362042.8900000001,0.678,"{'alpha': 0.05, 'l1_ratio': 0.5}"
-5.5,C1_Combined_ALK,Lasso,-0.176,615.9,379332.81,0.722,{'alpha': 0.1}
-5.5,C1_Combined_ALK,Random_Forest,-0.231,635.4,403733.16,0.948,"{'n_estimators': 200, 'max_depth': 3, 'min_samples_split': 10, 'min_samples_leaf': 4}"
-5.5,C1_Combined_ALK,XGBoost,-0.313,608.5,370272.25,0.776,"{'learning_rate': 0.005, 'max_depth': 1, 'n_estimators': 300, 'reg_alpha': 0.1, 'reg_lambda': 2.0}"
-5.5,C1_Combined_ALK,Multiple_Linear_Regression,-3.0676088703224815,801.4791110186816,642368.7653992961,3.411543838485468,{}
+﻿Distance_mm,Schema,Model,Test_R2,Test_RMSE,Test_MSE,Gap,Best_Params,Y_Std,Test_RMSE_std,Test_MSE_std
+1.5,C1_Combined_ALK,Robust_Linear_Regression,0.504,458.0,209764.0,0.081,"{'epsilon': 1.8, 'alpha': 0.05}",728.2389344402286,0.6289144652119546,0.39553340455283886
+1.5,C1_Combined_ALK,Neural_Network,0.423,382.4,146229.75999999998,0.219,"{'hidden_layer_sizes': (100, 50), 'alpha': 0.1, 'learning_rate_init': 0.001}",728.2389344402286,0.525102383181335,0.27573251282271755
+1.5,C1_Combined_ALK,SVM,0.417,403.9,163135.21,0.223,"{'C': 5000, 'epsilon': 200, 'gamma': 0.005}",728.2389344402286,0.5546256604784027,0.3076096232611044
+1.5,C1_Combined_ALK,Ridge,0.399,389.2,151476.63999999998,0.222,{'alpha': 0.5},728.2389344402286,0.5344399778613378,0.28562608993642724
+1.5,C1_Combined_ALK,ElasticNet,0.394,391.2,153037.44,0.227,"{'alpha': 0.005, 'l1_ratio': 0.8}",728.2389344402286,0.5371863292378092,0.2885691523199919
+1.5,C1_Combined_ALK,Lasso,0.393,391.5,153272.25,0.228,{'alpha': 0.1},728.2389344402286,0.5375982819442799,0.2890119127494415
+1.5,C1_Combined_ALK,Random_Forest,0.371,410.6,168592.36000000002,0.491,"{'n_estimators': 100, 'max_depth': 3, 'min_samples_split': 2, 'min_samples_leaf': 2}",728.2389344402286,0.563825937589582,0.3178996878987712
+1.5,C1_Combined_ALK,XGBoost,0.359,428.3,183440.89,0.41,"{'learning_rate': 0.03, 'max_depth': 2, 'n_estimators': 50, 'reg_alpha': 0.5, 'reg_lambda': 0.1}",728.2389344402286,0.5881311472713541,0.34589824639071914
+1.5,C1_Combined_ALK,Multiple_Linear_Regression,-0.4363619443918438,469.3603068942665,220299.09768788004,0.9345191072707215,{},728.2389344402286,0.6445141624500578,0.41539850559869945
+5.0,C1_Combined_ALK,SVM,0.039,635.1,403352.01,0.316,"{'C': 500, 'epsilon': 200, 'gamma': 0.01}",754.0083175717091,0.8422984006931722,0.7094665958102756
+5.0,C1_Combined_ALK,Robust_Linear_Regression,-0.078,605.5,366630.25,0.275,"{'epsilon': 1.2, 'alpha': 0.1}",754.0083175717091,0.8030415393161955,0.6448757138673248
+5.0,C1_Combined_ALK,Ridge,-0.095,595.1,354144.01,0.453,{'alpha': 100.0},754.0083175717091,0.789248588021582,0.622913333694061
+5.0,C1_Combined_ALK,Neural_Network,-0.17,614.5,377610.25,0.744,"{'hidden_layer_sizes': (40,), 'alpha': 0.3, 'learning_rate_init': 0.0005}",754.0083175717091,0.8149777471673032,0.6641887283778928
+5.0,C1_Combined_ALK,ElasticNet,-0.277,558.4,311810.56,0.626,"{'alpha': 1.0, 'l1_ratio': 0.05}",754.0083175717091,0.7405753848953981,0.548451900712967
+5.0,C1_Combined_ALK,XGBoost,-0.287,569.5,324330.25,0.895,"{'learning_rate': 0.03, 'max_depth': 3, 'n_estimators': 30, 'reg_alpha': 0.5, 'reg_lambda': 1.0}",754.0083175717091,0.7552967079117643,0.5704731169823489
+5.0,C1_Combined_ALK,Random_Forest,-0.293,522.6,273110.76,0.973,"{'n_estimators': 300, 'max_depth': 2, 'min_samples_split': 2, 'min_samples_leaf': 4}",754.0083175717091,0.6930958025543249,0.48038179151842375
+5.0,C1_Combined_ALK,Lasso,-0.42,606.2,367478.44000000006,0.922,{'alpha': 0.003},754.0083175717091,0.8039699110379483,0.6463676178543666
+5.0,C1_Combined_ALK,Multiple_Linear_Regression,-3.537876884930217,681.8630157989945,464937.17231449985,3.8928574988037505,{},754.0083175717091,0.9043176313955539,0.8177903784528648
+5.5,C1_Combined_ALK,SVM,0.145,624.5,390000.25,0.235,"{'C': 500, 'epsilon': 200, 'gamma': 0.01}",816.3735427370212,0.7649684455797834,0.58517672273275
+5.5,C1_Combined_ALK,Robust_Linear_Regression,0.078,635.6,403987.36000000004,0.347,"{'epsilon': 1.0, 'alpha': 0.0005}",816.3735427370212,0.778565162546854,0.6061637123316093
+5.5,C1_Combined_ALK,Neural_Network,-0.032,605.7,366872.49000000005,0.64,"{'hidden_layer_sizes': (40,), 'alpha': 0.3, 'learning_rate_init': 0.0005}",816.3735427370212,0.7419397717977179,0.5504746249752497
+5.5,C1_Combined_ALK,Ridge,-0.114,617.6,381429.76,0.468,{'alpha': 100.0},816.3735427370212,0.7565164323299828,0.5723171123852854
+5.5,C1_Combined_ALK,ElasticNet,-0.132,601.7,362042.8900000001,0.678,"{'alpha': 0.05, 'l1_ratio': 0.5}",816.3735427370212,0.7370400539717465,0.5432280411586751
+5.5,C1_Combined_ALK,Lasso,-0.176,615.9,379332.81,0.722,{'alpha': 0.1},816.3735427370212,0.7544340522539449,0.569170739200308
+5.5,C1_Combined_ALK,Random_Forest,-0.231,635.4,403733.16,0.948,"{'n_estimators': 200, 'max_depth': 3, 'min_samples_split': 10, 'min_samples_leaf': 4}",816.3735427370212,0.7783201766555554,0.605782297389135
+5.5,C1_Combined_ALK,XGBoost,-0.313,608.5,370272.25,0.776,"{'learning_rate': 0.005, 'max_depth': 1, 'n_estimators': 300, 'reg_alpha': 0.1, 'reg_lambda': 2.0}",816.3735427370212,0.7453695742758978,0.5555758022562332
+5.5,C1_Combined_ALK,Multiple_Linear_Regression,-3.0676088703224815,801.4791110186816,642368.7653992961,3.411543838485468,{},816.3735427370212,0.9817553718504843,0.9638436101572828

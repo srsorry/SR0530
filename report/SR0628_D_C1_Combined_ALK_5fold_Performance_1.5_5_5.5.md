@@ -8,44 +8,46 @@
 
 ## 一、各距离模型性能（5-fold）
 
+> `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。
+
 ### 1.5 mm
 
-| Model | Test R² | RMSE | MSE | Gap | Best Params |
-|-------|---------|------|-----|-----|-------------|
-| Lasso | 0.611 | 446.6 | 199451.6 | 0.007 | `{'alpha': 10.0}` |
-| ElasticNet | 0.606 | 450.8 | 203220.6 | 0.013 | `{'alpha': 0.001, 'l1_ratio': 0.5}` |
-| Random_Forest | 0.548 | 399.0 | 159201.0 | 0.245 | `{'n_estimators': 100, 'max_depth': 2, 'min_samples_split': 5, 'min_samples_leaf': 1}` |
-| Ridge | 0.472 | 437.6 | 191493.8 | 0.186 | `{'alpha': 0.1}` |
-| SVM | 0.433 | 487.0 | 237169.0 | 0.005 | `{'C': 2000, 'epsilon': 300, 'gamma': 0.005}` |
-| XGBoost | 0.417 | 495.7 | 245718.5 | 0.307 | `{'learning_rate': 0.1, 'max_depth': 1, 'n_estimators': 30, 'reg_alpha': 1.0, 'reg_lambda': 0.1}` |
-| Neural_Network | 0.403 | 445.4 | 198381.2 | 0.270 | `{'hidden_layer_sizes': (80, 40), 'alpha': 1.0, 'learning_rate_init': 0.0001}` |
-| Multiple_Linear_Regression | -0.046 | 566.8 | 321208.7 | 0.558 | `{}` |
+| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
+|-------|---------|------|-----|----------|---------|-----|-------------|
+| Lasso | 0.611 | 446.6 | 199451.6 | 0.613 | 0.376 | 0.007 | `{'alpha': 10.0}` |
+| ElasticNet | 0.606 | 450.8 | 203220.6 | 0.619 | 0.383 | 0.013 | `{'alpha': 0.001, 'l1_ratio': 0.5}` |
+| Random_Forest | 0.548 | 399.0 | 159201.0 | 0.548 | 0.300 | 0.245 | `{'n_estimators': 100, 'max_depth': 2, 'min_samples_split': 5, 'min_samples_leaf': 1}` |
+| Ridge | 0.472 | 437.6 | 191493.8 | 0.601 | 0.361 | 0.186 | `{'alpha': 0.1}` |
+| SVM | 0.433 | 487.0 | 237169.0 | 0.669 | 0.447 | 0.005 | `{'C': 2000, 'epsilon': 300, 'gamma': 0.005}` |
+| XGBoost | 0.417 | 495.7 | 245718.5 | 0.681 | 0.463 | 0.307 | `{'learning_rate': 0.1, 'max_depth': 1, 'n_estimators': 30, 'reg_alpha': 1.0, 'reg_lambda': 0.1}` |
+| Neural_Network | 0.403 | 445.4 | 198381.2 | 0.612 | 0.374 | 0.270 | `{'hidden_layer_sizes': (80, 40), 'alpha': 1.0, 'learning_rate_init': 0.0001}` |
+| Multiple_Linear_Regression | -0.046 | 566.8 | 321208.7 | 0.778 | 0.606 | 0.558 | `{}` |
 
 ### 5.0 mm
 
-| Model | Test R² | RMSE | MSE | Gap | Best Params |
-|-------|---------|------|-----|-----|-------------|
-| Neural_Network | 0.370 | 587.5 | 345156.2 | 0.156 | `{'hidden_layer_sizes': (80,), 'alpha': 0.5, 'learning_rate_init': 0.001}` |
-| Lasso | 0.365 | 590.0 | 348100.0 | 0.185 | `{'alpha': 10.0}` |
-| SVM | 0.360 | 601.3 | 361561.7 | 0.176 | `{'C': 5000, 'epsilon': 300, 'gamma': 0.005}` |
-| ElasticNet | 0.360 | 591.6 | 349990.6 | 0.191 | `{'alpha': 0.1, 'l1_ratio': 0.9}` |
-| Random_Forest | 0.355 | 507.6 | 257657.8 | 0.552 | `{'n_estimators': 100, 'max_depth': 5, 'min_samples_split': 2, 'min_samples_leaf': 1}` |
-| Ridge | 0.346 | 593.7 | 352479.7 | 0.088 | `{'alpha': 10.0}` |
-| XGBoost | 0.257 | 610.8 | 373076.6 | 0.397 | `{'learning_rate': 0.05, 'max_depth': 1, 'n_estimators': 50, 'reg_alpha': 2.0, 'reg_lambda': 0.1}` |
-| Multiple_Linear_Regression | -0.986 | 718.6 | 516453.5 | 1.353 | `{}` |
+| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
+|-------|---------|------|-----|----------|---------|-----|-------------|
+| Neural_Network | 0.370 | 587.5 | 345156.2 | 0.779 | 0.607 | 0.156 | `{'hidden_layer_sizes': (80,), 'alpha': 0.5, 'learning_rate_init': 0.001}` |
+| Lasso | 0.365 | 590.0 | 348100.0 | 0.782 | 0.612 | 0.185 | `{'alpha': 10.0}` |
+| SVM | 0.360 | 601.3 | 361561.7 | 0.797 | 0.636 | 0.176 | `{'C': 5000, 'epsilon': 300, 'gamma': 0.005}` |
+| ElasticNet | 0.360 | 591.6 | 349990.6 | 0.785 | 0.616 | 0.191 | `{'alpha': 0.1, 'l1_ratio': 0.9}` |
+| Random_Forest | 0.355 | 507.6 | 257657.8 | 0.673 | 0.453 | 0.552 | `{'n_estimators': 100, 'max_depth': 5, 'min_samples_split': 2, 'min_samples_leaf': 1}` |
+| Ridge | 0.346 | 593.7 | 352479.7 | 0.787 | 0.620 | 0.088 | `{'alpha': 10.0}` |
+| XGBoost | 0.257 | 610.8 | 373076.6 | 0.810 | 0.656 | 0.397 | `{'learning_rate': 0.05, 'max_depth': 1, 'n_estimators': 50, 'reg_alpha': 2.0, 'reg_lambda': 0.1}` |
+| Multiple_Linear_Regression | -0.986 | 718.6 | 516453.5 | 0.953 | 0.908 | 1.353 | `{}` |
 
 ### 5.5 mm
 
-| Model | Test R² | RMSE | MSE | Gap | Best Params |
-|-------|---------|------|-----|-----|-------------|
-| Neural_Network | 0.363 | 651.2 | 424061.4 | 0.266 | `{'hidden_layer_sizes': (80,), 'alpha': 0.3, 'learning_rate_init': 0.0001}` |
-| ElasticNet | 0.348 | 622.6 | 387630.8 | 0.110 | `{'alpha': 1.0, 'l1_ratio': 0.7}` |
-| SVM | 0.347 | 660.4 | 436128.2 | 0.163 | `{'C': 5000, 'epsilon': 300, 'gamma': 0.005}` |
-| XGBoost | 0.345 | 641.2 | 411137.4 | 0.347 | `{'learning_rate': 0.05, 'max_depth': 1, 'n_estimators': 50, 'reg_alpha': 2.0, 'reg_lambda': 0.1}` |
-| Ridge | 0.338 | 678.9 | 460905.2 | 0.093 | `{'alpha': 100.0}` |
-| Lasso | 0.325 | 628.7 | 395263.7 | 0.142 | `{'alpha': 10.0}` |
-| Random_Forest | 0.308 | 612.6 | 375278.8 | 0.550 | `{'n_estimators': 300, 'max_depth': 5, 'min_samples_split': 2, 'min_samples_leaf': 2}` |
-| Multiple_Linear_Regression | -1.208 | 837.4 | 701190.3 | 1.563 | `{}` |
+| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
+|-------|---------|------|-----|----------|---------|-----|-------------|
+| Neural_Network | 0.363 | 651.2 | 424061.4 | 0.798 | 0.636 | 0.266 | `{'hidden_layer_sizes': (80,), 'alpha': 0.3, 'learning_rate_init': 0.0001}` |
+| ElasticNet | 0.348 | 622.6 | 387630.8 | 0.763 | 0.582 | 0.110 | `{'alpha': 1.0, 'l1_ratio': 0.7}` |
+| SVM | 0.347 | 660.4 | 436128.2 | 0.809 | 0.654 | 0.163 | `{'C': 5000, 'epsilon': 300, 'gamma': 0.005}` |
+| XGBoost | 0.345 | 641.2 | 411137.4 | 0.785 | 0.617 | 0.347 | `{'learning_rate': 0.05, 'max_depth': 1, 'n_estimators': 50, 'reg_alpha': 2.0, 'reg_lambda': 0.1}` |
+| Ridge | 0.338 | 678.9 | 460905.2 | 0.832 | 0.692 | 0.093 | `{'alpha': 100.0}` |
+| Lasso | 0.325 | 628.7 | 395263.7 | 0.770 | 0.593 | 0.142 | `{'alpha': 10.0}` |
+| Random_Forest | 0.308 | 612.6 | 375278.8 | 0.750 | 0.563 | 0.550 | `{'n_estimators': 300, 'max_depth': 5, 'min_samples_split': 2, 'min_samples_leaf': 2}` |
+| Multiple_Linear_Regression | -1.208 | 837.4 | 701190.3 | 1.026 | 1.052 | 1.563 | `{}` |
 
 ## 二、最佳 Lasso @ 1.5 mm 诊断图
 

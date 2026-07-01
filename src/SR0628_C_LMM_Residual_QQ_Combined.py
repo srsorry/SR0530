@@ -16,6 +16,8 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+# 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
+plt.rcParams['pdf.fonttype'] = 42
 import scipy.stats as stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

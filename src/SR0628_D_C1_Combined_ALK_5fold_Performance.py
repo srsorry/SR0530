@@ -16,6 +16,8 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+# 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
+plt.rcParams['pdf.fonttype'] = 42
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
@@ -231,6 +233,24 @@ def plot_qq_residuals(residuals, title, out_path):
     print(f"  -> Q-Q PNG: {png_path}")
 
 
+def compute_y_std_per_distance(all_data, eye_to_subject, distances, min_quadrants=1):
+    """计算每个距离上目标变量的标准差，用于标准化 RMSE/MSE。"""
+    std_map = {}
+    for dist in distances:
+        df = aggregate_distance(all_data[dist], eye_to_subject, min_quadrants=min_quadrants)
+        std_map[dist] = df[TARGET_COL].std(ddof=1)
+    return std_map
+
+
+def add_standardized_rmse_mse(df, std_map):
+    """根据每个距离的目标变量标准差，添加 Test_RMSE_std 和 Test_MSE_std 列。"""
+    df = df.copy()
+    df['Y_Std'] = df['Distance_mm'].map(std_map)
+    df['Test_RMSE_std'] = df['Test_RMSE'] / df['Y_Std']
+    df['Test_MSE_std'] = df['Test_RMSE_std'] ** 2
+    return df
+
+
 def main():
     print("--- Loading 5-fold best params from SR0530_ALK_5fold_Final_Tuning_Report.md ---")
     df_params = parse_5fold_report_table(FIVEFOLD_REPORT_PATH, SCHEMA_NAME, DISTANCES)
@@ -279,7 +299,13 @@ def main():
         })
         print(f"  {dist:.1f} mm | Multiple_Linear_Regression | Test R2={res_ols['test_r2']:+.3f} | RMSE={res_ols['test_rmse']:.1f} | Gap={res_ols['gap']:.3f}")
 
-    df_perf = pd.DataFrame(rows).sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
+    df_perf = pd.DataFrame(rows)
+
+    # 添加标准化 RMSE / MSE（按各距离目标变量标准差）
+    y_std_map = compute_y_std_per_distance(all_data, eye_to_subject, DISTANCES)
+    df_perf = add_standardized_rmse_mse(df_perf, y_std_map)
+
+    df_perf = df_perf.sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
     csv_path = os.path.join(OUT_TABLE_DIR, f'{OUT_PREFIX}.csv')
     df_perf.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f"\nSaved 5-fold performance CSV: {csv_path}")
@@ -356,14 +382,16 @@ def main():
     md.append(f"- **诊断图说明**：使用默认随机种子 random_state={RANDOM_STATE} 重新生成，图中标注的 5-fold 均值可能与表中原始报告值略有差异（原始报告值为各模型 5-fold 寻优时的最佳 CV 结果）\n\n")
 
     md.append("## 一、各距离模型性能（5-fold）\n\n")
+    md.append("> `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。\n\n")
     for dist in DISTANCES:
         md.append(f"### {dist:.1f} mm\n\n")
-        md.append("| Model | Test R² | RMSE | MSE | Gap | Best Params |\n")
-        md.append("|-------|---------|------|-----|-----|-------------|\n")
+        md.append("| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |\n")
+        md.append("|-------|---------|------|-----|----------|---------|-----|-------------|\n")
         sub = df_perf[df_perf['Distance_mm'] == dist]
         for _, row in sub.iterrows():
             md.append(f"| {row['Model']} | {row['Test_R2']:.3f} | {row['Test_RMSE']:.1f} | "
-                      f"{row['Test_MSE']:.1f} | {row['Gap']:.3f} | `{row['Best_Params']}` |\n")
+                      f"{row['Test_MSE']:.1f} | {row['Test_RMSE_std']:.3f} | {row['Test_MSE_std']:.3f} | "
+                      f"{row['Gap']:.3f} | `{row['Best_Params']}` |\n")
         md.append("\n")
 
     md.append(f"## 二、最佳 {best_model_name} @ 1.5 mm 诊断图\n\n")

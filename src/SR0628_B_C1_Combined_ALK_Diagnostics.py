@@ -16,6 +16,8 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+# 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
+plt.rcParams['pdf.fonttype'] = 42
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -150,6 +152,24 @@ def evaluate_ols_performance(all_data, eye_to_subject, dist, schema_name,
     }
 
 
+def compute_y_std_per_distance(all_data, eye_to_subject, distances, min_quadrants=1):
+    """计算每个距离上目标变量的标准差，用于标准化 RMSE/MSE。"""
+    std_map = {}
+    for dist in distances:
+        df = aggregate_distance(all_data[dist], eye_to_subject, min_quadrants=min_quadrants)
+        std_map[dist] = df[TARGET_COL].std(ddof=1)
+    return std_map
+
+
+def add_standardized_rmse_mse(df, std_map):
+    """根据每个距离的目标变量标准差，添加 Test_RMSE_std 和 Test_MSE_std 列。"""
+    df = df.copy()
+    df['Y_Std'] = df['Distance_mm'].map(std_map)
+    df['Test_RMSE_std'] = df['Test_RMSE'] / df['Y_Std']
+    df['Test_MSE_std'] = df['Test_RMSE_std'] ** 2
+    return df
+
+
 def collect_out_of_fold_predictions(model_name, model_config, params, X, y, groups, y_stratify,
                                     n_splits=10, random_state=42):
     """收集每个样本的 out-of-fold 预测值与真实值，并返回每折的 test 指标。"""
@@ -269,6 +289,11 @@ def main():
                                           n_splits=N_SPLITS, random_state=RANDOM_STATE)
                 for d in DISTANCES]
     df_perf = pd.concat([df_perf, pd.DataFrame(ols_rows)], ignore_index=True)
+
+    # 添加标准化 RMSE / MSE（按各距离目标变量标准差）
+    y_std_map = compute_y_std_per_distance(all_data, eye_to_subject, DISTANCES)
+    df_perf = add_standardized_rmse_mse(df_perf, y_std_map)
+
     df_perf = df_perf.sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
 
     csv_path = os.path.join(OUT_TABLE_DIR, 'SR0628_B_C1_Combined_ALK_Performance_1.5_5_5.5.csv')
@@ -347,14 +372,16 @@ def main():
     md.append(f"- **诊断图说明**：散点图与 SHAP 图使用与报告最佳 R²=0.504 相匹配的 CV 拆分种子（seed={BEST_ROBUST_SEED}）生成\n\n")
 
     md.append("## 一、各距离模型性能\n\n")
+    md.append("> `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。\n\n")
     for dist in DISTANCES:
         md.append(f"### {dist:.1f} mm\n\n")
-        md.append("| Model | Test R² | RMSE | MSE | Gap | Best Params |\n")
-        md.append("|-------|---------|------|-----|-----|-------------|\n")
+        md.append("| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |\n")
+        md.append("|-------|---------|------|-----|----------|---------|-----|-------------|\n")
         sub = df_perf[df_perf['Distance_mm'] == dist]
         for _, row in sub.iterrows():
             md.append(f"| {row['Model']} | {row['Test_R2']:.3f} | {row['Test_RMSE']:.1f} | "
-                      f"{row['Test_MSE']:.1f} | {row['Gap']:.3f} | `{row['Best_Params']}` |\n")
+                      f"{row['Test_MSE']:.1f} | {row['Test_RMSE_std']:.3f} | {row['Test_MSE_std']:.3f} | "
+                      f"{row['Gap']:.3f} | `{row['Best_Params']}` |\n")
         md.append("\n")
 
     md.append("## 二、最佳 Robust Linear Regression @ 1.5 mm 诊断图\n\n")
