@@ -22,6 +22,11 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+# 全局字体设置：Calibri 为首选，中文回退
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
+
 # ============================================================
 # 配置
 # ============================================================
@@ -32,7 +37,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 SER_COL = 'Spherical equivalent refraction (D)'
 AL_COL = 'Axial length (mm)'
-DIST_COL = 'Eccentricity (mm)'
+DIST_COL = 'Eccentricity (°)'
 
 # 字体设置（兼容中文标签，如果中文无法显示会回退英文）
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
@@ -99,7 +104,7 @@ def plot_one_distance(x, y, dist, n, out_path, figsize=(7, 6)):
     ax.set_ylabel('Axial Length (mm)', fontsize=13)
 
     # 标题/题注
-    ax.set_title(f'Linear Regression at {dist:.1f} mm Eccentricity (n = {n})', fontsize=14, pad=12)
+    ax.set_title(f'Linear Regression at {dist:.1f}° Eccentricity (n = {n})', fontsize=14, pad=12)
 
     # 美化
     ax.spines['top'].set_visible(False)
@@ -145,7 +150,7 @@ def plot_combined_grid(distances, results, out_path, nrows=3, ncols=4, figsize=(
 
             ax.set_xlabel('SER (D)', fontsize=10)
             ax.set_ylabel('AL (mm)', fontsize=10)
-            ax.set_title(f'{dist:.1f} mm (n = {n})', fontsize=11, pad=6)
+            ax.set_title(f'{dist:.1f}° (n = {n})', fontsize=11, pad=6)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.tick_params(axis='both', which='major', labelsize=9)
@@ -186,7 +191,7 @@ def main():
             'r': r_value, 'p': p_value
         }
         summary_rows.append({
-            'Distance_mm': dist,
+            'Distance_deg': dist,
             'N': n,
             'Slope': slope,
             'Intercept': intercept,
@@ -195,7 +200,7 @@ def main():
             'Equation': f'y = {slope:.3f}x + {intercept:.3f}'
         })
 
-        print(f"  {dist:.1f} mm (n={n}): y = {slope:.3f}x + {intercept:.3f}, r = {r_value:.3f}, P = {p_value:.4f}")
+        print(f"  {dist:.1f}° (n={n}): y = {slope:.3f}x + {intercept:.3f}, r = {r_value:.3f}, P = {p_value:.4f}")
 
     # 合并图（所有 1.0-6.0 mm，3x4 布局）
     combined_path = os.path.join(OUT_DIR, 'SR0530_SER_AL_LinReg_Combined_1.0to6.0mm.png')

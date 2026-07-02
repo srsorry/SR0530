@@ -13,6 +13,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 # 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
 plt.rcParams['pdf.fonttype'] = 42
+# Calibri 为首选字体；中文回退到 SimHei / Microsoft YaHei
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 from scipy import stats
 import os
 import re
@@ -42,8 +45,8 @@ PNG_DPI = 1200
 FIGURE_DPI = 150
 
 # 输出文件名
-OUTPUT_1MM = 'FIGA_1.0mm'
-OUTPUT_OTHERS = 'FIGA_1.5-6.0mm'
+OUTPUT_1MM = 'FIGA_1.0deg'
+OUTPUT_OTHERS = 'FIGA_1.5-6.0deg'
 
 # 异常值阈值（角密度 > 10000 视为异常）
 ANGULAR_OUTLIER_THRESHOLD = 1e4
@@ -132,7 +135,7 @@ def draw_figure_1mm(distance_dict):
     """1.0 mm 单独成图"""
     dist = 1.0
     if dist not in distance_dict:
-        raise KeyError(f"数据中不存在 {dist} mm")
+        raise KeyError(f"数据中不存在 {dist}°")
 
     df = distance_dict[dist]
     color = COLORMAP(0.15)
@@ -157,7 +160,7 @@ def draw_figure_1mm(distance_dict):
 
     ax.set_xlabel('Axial Length (mm)', fontsize=14, fontweight='bold')
     ax.set_ylabel('Linear Cone Density (cones/mm²)', fontsize=14, fontweight='bold')
-    ax.set_title(f'1.0 mm', fontsize=16, fontweight='bold')
+    ax.set_title(f'1.0°', fontsize=16, fontweight='bold')
     ax.tick_params(labelsize=12)
     ax.grid(True, alpha=0.12, linestyle='-')
     ax.spines['top'].set_visible(False)
@@ -188,7 +191,7 @@ def draw_figure_1mm(distance_dict):
 
     ax.set_xlabel('Axial Length (mm)', fontsize=14, fontweight='bold')
     ax.set_ylabel('Angular Cone Density (cones/deg²)', fontsize=14, fontweight='bold')
-    ax.set_title(f'1.0 mm', fontsize=16, fontweight='bold')
+    ax.set_title(f'1.0°', fontsize=16, fontweight='bold')
     ax.tick_params(labelsize=12)
     ax.grid(True, alpha=0.12, linestyle='-')
     ax.spines['top'].set_visible(False)
@@ -208,7 +211,7 @@ def draw_figure_1mm(distance_dict):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out_pdf = os.path.join(OUTPUT_DIR, f"{OUTPUT_1MM}.pdf")
     fig.savefig(out_pdf, format='pdf', bbox_inches='tight', pad_inches=0.2, facecolor='white')
-    print(f"[OK] 1.0 mm 图已保存: {out_pdf}")
+    print(f"[OK] 1.0° 图已保存: {out_pdf}")
     plt.show()
 
     return fig
@@ -218,7 +221,7 @@ def draw_figure_others(distance_dict):
     """1.5–6.0 mm 十个距离绘制在同一张图内"""
     other_dists = [d for d in distance_dict.keys() if d != 1.0]
     if not other_dists:
-        print("[WARN] 没有除 1.0 mm 之外的距离数据")
+        print("[WARN] 没有除 1.0° 之外的距离数据")
         return None
 
     n = len(other_dists)
@@ -249,7 +252,7 @@ def draw_figure_others(distance_dict):
                  linestyle='-' if sig else ':', zorder=2)
 
         stats_A.append({
-            'label': f"{dist:.1f} mm", 'slope': slope, 'r2': r ** 2,
+            'label': f"{dist:.1f}°", 'slope': slope, 'r2': r ** 2,
             'p': p, 'sig': sig, 'n': len(x)
         })
 
@@ -293,7 +296,7 @@ def draw_figure_others(distance_dict):
                  linestyle='-' if sig else ':', zorder=2)
 
         stats_B.append({
-            'label': f"{dist:.1f} mm", 'slope': slope, 'r2': r ** 2,
+            'label': f"{dist:.1f}°", 'slope': slope, 'r2': r ** 2,
             'p': p, 'sig': sig, 'n': len(x)
         })
 

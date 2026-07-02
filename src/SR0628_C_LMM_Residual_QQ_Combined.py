@@ -16,6 +16,11 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# 全局字体设置：Calibri 为首选，中文回退
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 # 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
 plt.rcParams['pdf.fonttype'] = 42
 import scipy.stats as stats
@@ -52,7 +57,7 @@ def plot_combined_qq(qq_data, n_eyes_total, n_subjects_total, out_path_pdf, out_
         ax = axes[idx]
         residuals = qq_data[dist]['residuals']
         stats.probplot(residuals, dist="norm", plot=ax)
-        ax.set_title(f'{dist:.1f} mm')
+        ax.set_title(f'{dist:.1f}°')
         ax.grid(True, alpha=0.3)
 
     # 隐藏多余子图
@@ -101,7 +106,7 @@ def main():
     md.append(f"- **残差**：标准化后的 LMM 残差\n\n")
 
     md.append("## 各距离样本量\n\n")
-    md.append("| Distance (mm) | Eyes (n) | Subjects (n) |\n")
+    md.append("| Eccentricity (°) | Eyes (n) | Subjects (n) |\n")
     md.append("|---------------|----------|---------------|\n")
     for _, row in df_lmm.sort_values('Distance').iterrows():
         md.append(f"| {row['Distance']:.1f} | {int(row['N_eyes'])} | {int(row['N_subjects'])} |\n")

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-SR0530 Figure B：基于 lenient 71 眼 1.0 mm 聚合数据
+SR0530 Figure B：基于 lenient 71 眼 1.0° 聚合数据
 - FIGB1：SE vs AL 散点 + 线性回归
 - FIGB2：GEE 多因素回归森林图（标准化 β 系数）
 ================================================================================
@@ -14,6 +14,9 @@ matplotlib.use('Agg')  # 非交互后端，适合服务器/批处理运行
 import matplotlib.pyplot as plt
 # 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
 plt.rcParams['pdf.fonttype'] = 42
+# Calibri 为首选字体；中文回退到 SimHei / Microsoft YaHei
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 import seaborn as sns
 from scipy import stats
 import os
@@ -80,9 +83,9 @@ def load_1mm_aggregated(data_dir):
 
     grouped = df_all.groupby(['Subject_ID', 'Eccentricity (mm)'], as_index=False).agg(agg_dict)
 
-    # 取 1.0 mm
+    # 取 1.0°
     df_1mm = grouped[grouped['Eccentricity (mm)'] == 1.0].copy().reset_index(drop=True)
-    print(f"[OK] 已加载 1.0 mm 聚合数据: n = {len(df_1mm)} subjects")
+    print(f"[OK] 已加载 1.0° 聚合数据: n = {len(df_1mm)} subjects")
     return df_1mm
 
 
@@ -99,6 +102,10 @@ def genFig1(df):
 
     plt.figure(figsize=(8, 6), dpi=150)
     sns.set_theme(style="ticks")
+    # re-apply Calibri after sns.set_theme overrides rcParams
+    plt.rcParams['pdf.fonttype'] = 42
+    plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
 
     plt.scatter(x, y, color='dodgerblue', edgecolor='black', s=60, alpha=0.8, zorder=2)
 
@@ -209,7 +216,7 @@ def genFig2(df):
     print(f"[OK] GEE 结果已保存为 CSV: {OUTPUT_CSV}")
 
     # ================= 绘制学术森林图 =================
-    plt.rcParams['font.sans-serif'] = ['Arial']
+    plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
     # 压缩纵向间距，使整体更紧凑
     fig, ax = plt.subplots(figsize=(10.5, 5.2), dpi=300)
 
@@ -246,7 +253,7 @@ def genFig2(df):
     ax.set_yticklabels(res_df['Label'], fontsize=10, fontweight='bold')
 
     ax.set_xlabel('Standardized Regression Coefficient (β)', fontsize=13, fontweight='bold', labelpad=10)
-    ax.set_title('Adjusted GEE Model for Angular Cone Density (1.0 mm)', fontsize=15, fontweight='bold', pad=15)
+    ax.set_title('Adjusted GEE Model for Angular Cone Density (1.0°)', fontsize=15, fontweight='bold', pad=15)
 
     # 隐藏上、右边框；显示左侧 y 轴实线
     ax.spines['top'].set_visible(False)

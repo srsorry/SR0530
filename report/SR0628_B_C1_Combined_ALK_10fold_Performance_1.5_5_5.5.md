@@ -1,4 +1,4 @@
-# SR0628_B C1_Combined_ALK 在 1.5 / 5.0 / 5.5 mm 的性能汇总与最佳模型诊断
+# SR0628_B C1_Combined_ALK 在 1.5 / 5.0 / 5.5 mm 的 10-fold CV 性能汇总与最佳模型诊断
 
 - **数据组**：lenient（71 eyes / 46 subjects）
 - **方案**：C1_Combined_ALK
@@ -10,7 +10,7 @@
 
 > `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。
 
-### 1.5 mm
+### 1.5°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|
@@ -24,7 +24,7 @@
 | XGBoost | 0.359 | 428.3 | 183440.9 | 0.588 | 0.346 | 0.410 | `{'learning_rate': 0.03, 'max_depth': 2, 'n_estimators': 50, 'reg_alpha': 0.5, 'reg_lambda': 0.1}` |
 | Multiple_Linear_Regression | -0.436 | 469.4 | 220299.1 | 0.645 | 0.415 | 0.935 | `{}` |
 
-### 5.0 mm
+### 5.0°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|
@@ -38,7 +38,7 @@
 | Lasso | -0.420 | 606.2 | 367478.4 | 0.804 | 0.646 | 0.922 | `{'alpha': 0.003}` |
 | Multiple_Linear_Regression | -3.538 | 681.9 | 464937.2 | 0.904 | 0.818 | 3.893 | `{}` |
 
-### 5.5 mm
+### 5.5°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|

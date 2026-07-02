@@ -2,7 +2,7 @@
 SR0530：基于 71 眼的 FIGA 风格 MLR 偏残差图
 
 参考 gen_figA.py / genData/FIGA/FIGA.pdf 的风格，将原图拆成两份：
-- 图 4：1.0 mm 处，线密度和角密度随 AL 的多重线性回归偏残差图
+- 图 4：1.0° 处，线密度和角密度随 AL 的多重线性回归偏残差图
 - 图 5：1.5–6.0 mm 处，线密度随 AL 的多重线性回归偏残差图（多距离叠加）
 
 方法：
@@ -22,6 +22,11 @@ from scipy import stats
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# 全局字体设置：Calibri 为首选，中文回退
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
@@ -46,7 +51,7 @@ FEATURE_ALL = {
 }
 LINEAR_DEN = 'Linear cone density (cones/ mm2)'
 ANGULAR_DEN = 'Angular cone density (cones/ deg2)'
-DIST_COL = 'Eccentricity (mm)'
+DIST_COL = 'Eccentricity (mm)'  # 数据源列名，显示用 °
 
 covariates = ['Age', 'SE', 'Gender', 'K', 'ACD']  # 除 AL 外的协变量
 AL = 'AL'
@@ -54,7 +59,7 @@ AL = 'AL'
 # 颜色映射（参考 FIGA 的 turbo，但按距离均匀取色）
 CMAP = plt.cm.turbo
 
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 
@@ -136,7 +141,7 @@ def fit_mlr_get_al_effect(X, y):
 
 
 def plot_figure4(df_10, out_path):
-    """图 4：1.0 mm 处线密度 + 角密度 vs AL 的偏残差图"""
+    """图 4：1.0° 处线密度 + 角密度 vs AL 的偏残差图"""
     fig, axes = plt.subplots(2, 1, figsize=(9, 12))
 
     X = encode_features(df_10)
@@ -178,7 +183,7 @@ def plot_figure4(df_10, out_path):
 
         ax.set_xlabel('Axial Length (mm)', fontsize=14, fontweight='bold')
         ax.set_ylabel(ylabel, fontsize=14, fontweight='bold')
-        ax.set_title(f'1.0 mm: {title_suffix} vs AL (after MLR)', fontsize=15, pad=10)
+        ax.set_title(f'1.0°: {title_suffix} vs AL (after MLR)', fontsize=15, pad=10)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.tick_params(labelsize=12)
@@ -234,7 +239,7 @@ def plot_figure5(all_data, out_path):
 
     ax.set_xlabel('Axial Length (mm)', fontsize=15, fontweight='bold')
     ax.set_ylabel('Linear Cone Density (cones/mm²)', fontsize=15, fontweight='bold')
-    ax.set_title('1.5–6.0 mm: Linear Density vs AL (after MLR)', fontsize=16, pad=12)
+    ax.set_title('1.5–6.0°: Linear Density vs AL (after MLR)', fontsize=16, pad=12)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.tick_params(labelsize=12)
@@ -243,9 +248,9 @@ def plot_figure5(all_data, out_path):
     # 图例
     handles = []
     for i, s in enumerate(stats_list):
-        txt = f"{s['dist']:.1f} mm {'*' if s['sig'] else ''}P = {s['p']:.4f}"
+        txt = f"{s['dist']:.1f}° {'*' if s['sig'] else ''}P = {s['p']:.4f}"
         if s['p'] < 0.0001:
-            txt = f"{s['dist']:.1f} mm {'*' if s['sig'] else ''}P < 0.0001"
+            txt = f"{s['dist']:.1f}° {'*' if s['sig'] else ''}P < 0.0001"
         handles.append(
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
                        markersize=9, markeredgecolor='black', markeredgewidth=0.5, label=txt)
@@ -268,14 +273,14 @@ def main():
 
     # 图 4：1.0 mm
     df_10 = aggregate_distance(all_data[1.0])
-    fig4_path = os.path.join(OUT_DIR, 'SR0530_FigA_Task4_1.0mm_MLR.pdf')
+    fig4_path = os.path.join(OUT_DIR, 'SR0530_FigA_Task4_1.0deg_MLR.pdf')
     plot_figure4(df_10, fig4_path)
     print(f"  Figure 4 saved: {fig4_path}")
     print(f"    1.0 mm Linear: n={len(df_10)}")
     print(f"    1.0 mm Angular: n={len(df_10)}")
 
     # 图 5：1.5–6.0 mm
-    fig5_path = os.path.join(OUT_DIR, 'SR0530_FigA_Task5_1.5to6.0mm_MLR.pdf')
+    fig5_path = os.path.join(OUT_DIR, 'SR0530_FigA_Task5_1.5to6.0deg_MLR.pdf')
     plot_figure5(all_data, fig5_path)
     print(f"  Figure 5 saved: {fig5_path}")
 
@@ -291,7 +296,7 @@ def main():
                 y = df_sub[den_col].values
                 res = fit_mlr_get_al_effect(X, y)
                 summary.append({
-                    'Distance_mm': dist,
+                    'Distance_deg': dist,
                     'Density_Type': den_name,
                     'N': res['n'],
                     'AL_Beta': res['beta_al'],

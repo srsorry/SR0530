@@ -18,6 +18,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 # 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
 plt.rcParams['pdf.fonttype'] = 42
+# Calibri 为首选字体；中文回退到 SimHei / Microsoft YaHei
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -95,7 +98,7 @@ def parse_report_table(md_path, schema_name, distances):
             continue
         if schema == schema_name and dist in distances:
             rows.append({
-                'Distance_mm': dist,
+                'Distance_deg': dist,
                 'Schema': schema,
                 'Model': model,
                 'Test_R2': r2,
@@ -105,7 +108,7 @@ def parse_report_table(md_path, schema_name, distances):
                 'Best_Params': params,
             })
     df = pd.DataFrame(rows)
-    df = df.sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
+    df = df.sort_values(['Distance_deg', 'Test_R2'], ascending=[True, False])
     return df
 
 
@@ -141,7 +144,7 @@ def evaluate_ols_performance(all_data, eye_to_subject, dist, schema_name,
     mean_train_r2 = np.mean(train_r2_list)
     gap = mean_train_r2 - mean_test_r2
     return {
-        'Distance_mm': dist,
+        'Distance_deg': dist,
         'Schema': schema_name,
         'Model': 'Multiple_Linear_Regression',
         'Test_R2': mean_test_r2,
@@ -164,7 +167,7 @@ def compute_y_std_per_distance(all_data, eye_to_subject, distances, min_quadrant
 def add_standardized_rmse_mse(df, std_map):
     """根据每个距离的目标变量标准差，添加 Test_RMSE_std 和 Test_MSE_std 列。"""
     df = df.copy()
-    df['Y_Std'] = df['Distance_mm'].map(std_map)
+    df['Y_Std'] = df['Distance_deg'].map(std_map)
     df['Test_RMSE_std'] = df['Test_RMSE'] / df['Y_Std']
     df['Test_MSE_std'] = df['Test_RMSE_std'] ** 2
     return df
@@ -212,32 +215,64 @@ def collect_out_of_fold_predictions(model_name, model_config, params, X, y, grou
 
 
 def plot_scatter_observed_predicted(y_true, y_pred, cv_metrics, title, out_path):
+    """仿 orgData/示意图-线性.png 风格：白底、黑圈、虚线为 Identity、实线为拟合线。"""
     # 全样本的 Pearson r（用于展示预测与观测的相关性）
     corr = np.corrcoef(y_true, y_pred)[0, 1]
     # 散点图使用 10-fold 平均指标进行标注，避免跨折聚合带来的乐观偏差
     r2 = cv_metrics['mean_r2']
     rmse = cv_metrics['mean_rmse']
     mape_val = cv_metrics['mean_mape']
+    n = len(y_true)
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.scatter(y_true, y_pred, edgecolors='k', facecolors='steelblue', alpha=0.7, s=60)
+    fig.patch.set_facecolor('white')
+    ax.set_facecolor('white')
+
+    # 坐标轴、刻度、标签设为黑色
+    for spine in ax.spines.values():
+        spine.set_color('black')
+    ax.tick_params(colors='black', which='both')
+    ax.xaxis.label.set_color('black')
+    ax.yaxis.label.set_color('black')
+    ax.title.set_color('black')
+
+    # 散点：白底 + 黑边圆圈（n = 71）
+    ax.scatter(y_true, y_pred, facecolors='white', edgecolors='black',
+               s=70, linewidths=1.2, label='Data', zorder=3)
+
     lims = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
-    ax.plot(lims, lims, 'r--', lw=1.5, label='Identity line')
+    # 留出 5% 边距，避免边缘点（大圆圈）被坐标轴裁切
+    pad = 0.05 * (lims[1] - lims[0])
+    lims = [lims[0] - pad, lims[1] + pad]
+
+    # 虚线：Identity / 标准参考线
+    ax.plot(lims, lims, 'k--', lw=1.5, label='Identity line', zorder=2)
+
+    # 实线：实际估计线（观测-预测回归拟合）
+    slope, intercept = np.polyfit(y_true, y_pred, 1)
+    x_line = np.linspace(lims[0], lims[1], 100)
+    y_line = slope * x_line + intercept
+    ax.plot(x_line, y_line, 'k-', lw=2.5, label='Fitting line', zorder=2)
+
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_xlabel('Observed Angular cone density (cones/deg²)')
     ax.set_ylabel('Predicted Angular cone density (cones/deg²)')
     ax.set_title(title)
-    textstr = f"10-fold mean R² = {r2:.3f}\n10-fold mean RMSE = {rmse:.1f}\n10-fold mean MAPE = {mape_val:.1f}%\nr = {corr:.3f}"
-    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    ax.legend(loc='lower right')
+
+    # 左上角标注 n 与指标
+    textstr = f"n={n}\nR² = {r2:.3f}\nRMSE = {rmse:.1f}\nMAPE = {mape_val:.1f}%\nr = {corr:.3f}"
+    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=11,
+            verticalalignment='top', color='black')
+
+    ax.legend(loc='lower right', facecolor='white', edgecolor='black',
+              labelcolor='black')
     ax.set_aspect('equal', adjustable='box')
     plt.tight_layout()
     # 同时输出 PDF（出版用）和 PNG（Markdown 预览用）
-    plt.savefig(out_path, format='pdf', bbox_inches='tight')
+    plt.savefig(out_path, format='pdf', bbox_inches='tight', facecolor='white')
     png_path = str(out_path).replace('.pdf', '.png')
-    plt.savefig(png_path, format='png', dpi=300, bbox_inches='tight')
+    plt.savefig(png_path, format='png', dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     print(f"  -> Scatter PDF: {out_path}")
     print(f"  -> Scatter PNG: {png_path}")
@@ -294,9 +329,9 @@ def main():
     y_std_map = compute_y_std_per_distance(all_data, eye_to_subject, DISTANCES)
     df_perf = add_standardized_rmse_mse(df_perf, y_std_map)
 
-    df_perf = df_perf.sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
+    df_perf = df_perf.sort_values(['Distance_deg', 'Test_R2'], ascending=[True, False])
 
-    csv_path = os.path.join(OUT_TABLE_DIR, 'SR0628_B_C1_Combined_ALK_Performance_1.5_5_5.5.csv')
+    csv_path = os.path.join(OUT_TABLE_DIR, 'SR0628_B_C1_Combined_ALK_10fold_Performance_1.5_5_5.5.csv')
     df_perf.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f"Saved performance CSV: {csv_path}")
 
@@ -329,7 +364,7 @@ def main():
     scatter_path = os.path.join(OUT_FIG_DIR, 'SR0628_B_Scatter_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf')
     plot_scatter_observed_predicted(
         y_true, y_pred, cv_metrics,
-        f'{SCHEMA_NAME} / {best_model_name} @ {dist:.1f} mm\n10-fold out-of-sample predictions',
+        f'{SCHEMA_NAME} / {best_model_name} @ {dist:.1f}°\n10-fold out-of-sample predictions',
         scatter_path
     )
 
@@ -343,7 +378,7 @@ def main():
     shap_path = os.path.join(OUT_FIG_DIR, 'SR0628_B_SHAP_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf')
     plot_shap_summary_pdf(
         exp,
-        f'{SCHEMA_NAME} {best_model_name} @ {dist:.1f} mm (10-fold CV SHAP)',
+        f'{SCHEMA_NAME} {best_model_name} @ {dist:.1f}° (10-fold CV SHAP)',
         shap_path
     )
 
@@ -356,7 +391,7 @@ def main():
     qq_path = os.path.join(OUT_FIG_DIR, 'SR0628_B_QQ_Residuals_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf')
     plot_qq_residuals(
         residuals,
-        f'{SCHEMA_NAME} {best_model_name} @ {dist:.1f} mm\nResidual Q-Q plot (n={n_eyes} eyes)',
+        f'{SCHEMA_NAME} {best_model_name} @ {dist:.1f}°\nResidual Q-Q plot (n={n_eyes} eyes)',
         qq_path
     )
 
@@ -364,7 +399,7 @@ def main():
     # 6. 生成 Markdown 报告
     # ---------------------------
     md = []
-    md.append(f"# SR0628_B C1_Combined_ALK 在 1.5 / 5.0 / 5.5 mm 的性能汇总与最佳模型诊断\n\n")
+    md.append(f"# SR0628_B C1_Combined_ALK 在 1.5 / 5.0 / 5.5 mm 的 10-fold CV 性能汇总与最佳模型诊断\n\n")
     md.append(f"- **数据组**：lenient（71 eyes / 46 subjects）\n")
     md.append(f"- **方案**：{SCHEMA_NAME}\n")
     md.append(f"- **CV**：{N_SPLITS}-fold GroupKFold by Subject，按 Myopia 分层\n")
@@ -374,10 +409,10 @@ def main():
     md.append("## 一、各距离模型性能\n\n")
     md.append("> `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。\n\n")
     for dist in DISTANCES:
-        md.append(f"### {dist:.1f} mm\n\n")
+        md.append(f"### {dist:.1f}°\n\n")
         md.append("| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |\n")
         md.append("|-------|---------|------|-----|----------|---------|-----|-------------|\n")
-        sub = df_perf[df_perf['Distance_mm'] == dist]
+        sub = df_perf[df_perf['Distance_deg'] == dist]
         for _, row in sub.iterrows():
             md.append(f"| {row['Model']} | {row['Test_R2']:.3f} | {row['Test_RMSE']:.1f} | "
                       f"{row['Test_MSE']:.1f} | {row['Test_RMSE_std']:.3f} | {row['Test_MSE_std']:.3f} | "
@@ -411,7 +446,7 @@ def main():
     md.append("---\n\n")
     md.append("*Generated by src/SR0628_B_C1_Combined_ALK_Diagnostics.py*\n")
 
-    md_path = os.path.join(OUT_REPORT_DIR, 'SR0628_B_C1_Combined_ALK_Performance_1.5_5_5.5.md')
+    md_path = os.path.join(OUT_REPORT_DIR, 'SR0628_B_C1_Combined_ALK_10fold_Performance_1.5_5_5.5.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(''.join(md))
     print(f"\nSaved report: {md_path}")

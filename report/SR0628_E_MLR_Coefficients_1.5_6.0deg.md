@@ -1,4 +1,4 @@
-# SR0628_E 1.5–6.0 mm 多元线性回归系数表
+# SR0628_E 1.5–6.0° 多元线性回归系数表
 
 - **数据**：lenient（71 eyes / 46 subjects），按 `Subject_ID + Eye` 聚合象限
 - **模型**：Density ~ AL + Age + Gender + SER + K + ACD

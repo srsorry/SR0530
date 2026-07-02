@@ -1,4 +1,4 @@
-﻿Distance_mm,Schema,Model,Test_R2,Test_RMSE,Test_MSE,Gap,Best_Params,Y_Std,Test_RMSE_std,Test_MSE_std
+﻿Distance_deg,Schema,Model,Test_R2,Test_RMSE,Test_MSE,Gap,Best_Params,Y_Std,Test_RMSE_std,Test_MSE_std
 1.5,C1_Combined_ALK,Lasso,0.611,446.6,199451.56000000003,0.007,{'alpha': 10.0},728.2389344402286,0.6132602623660675,0.3760881493972979
 1.5,C1_Combined_ALK,ElasticNet,0.606,450.8,203220.64,0.013,"{'alpha': 0.001, 'l1_ratio': 0.5}",728.2389344402286,0.6190276002566575,0.38319516987951613
 1.5,C1_Combined_ALK,Random_Forest,0.548,399.0,159201.0,0.245,"{'n_estimators': 100, 'max_depth': 2, 'min_samples_split': 5, 'min_samples_leaf': 1}",728.2389344402286,0.5478970996060477,0.30019123175671936

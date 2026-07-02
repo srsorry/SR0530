@@ -8,7 +8,7 @@
 
 ## 各距离样本量
 
-| Distance (mm) | Eyes (n) | Subjects (n) |
+| Eccentricity (°) | Eyes (n) | Subjects (n) |
 |---------------|----------|---------------|
 | 1.0 | 71 | 46 |
 | 1.5 | 71 | 46 |

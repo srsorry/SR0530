@@ -10,7 +10,7 @@
 
 > `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。
 
-### 1.5 mm
+### 1.5°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|
@@ -23,7 +23,7 @@
 | Neural_Network | 0.403 | 445.4 | 198381.2 | 0.612 | 0.374 | 0.270 | `{'hidden_layer_sizes': (80, 40), 'alpha': 1.0, 'learning_rate_init': 0.0001}` |
 | Multiple_Linear_Regression | -0.046 | 566.8 | 321208.7 | 0.778 | 0.606 | 0.558 | `{}` |
 
-### 5.0 mm
+### 5.0°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|
@@ -36,7 +36,7 @@
 | XGBoost | 0.257 | 610.8 | 373076.6 | 0.810 | 0.656 | 0.397 | `{'learning_rate': 0.05, 'max_depth': 1, 'n_estimators': 50, 'reg_alpha': 2.0, 'reg_lambda': 0.1}` |
 | Multiple_Linear_Regression | -0.986 | 718.6 | 516453.5 | 0.953 | 0.908 | 1.353 | `{}` |
 
-### 5.5 mm
+### 5.5°
 
 | Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |
 |-------|---------|------|-----|----------|---------|-----|-------------|

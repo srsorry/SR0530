@@ -1,0 +1,6 @@
+# Project-wide matplotlib style
+# Ensures Calibri font for Latin text and fallback fonts for Chinese/Unicode
+font.family: sans-serif
+font.sans-serif: Calibri, SimHei, Microsoft YaHei, Arial Unicode MS, DejaVu Sans
+axes.unicode_minus: False
+pdf.fonttype: 42

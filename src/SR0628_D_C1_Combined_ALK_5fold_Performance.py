@@ -18,6 +18,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 # 让 PDF 中的文字以可编辑字体（Type 42 TrueType）嵌入，而非默认的 Type 3 轮廓字体
 plt.rcParams['pdf.fonttype'] = 42
+# Calibri 为首选字体；中文回退到 SimHei / Microsoft YaHei
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
@@ -99,7 +102,7 @@ def parse_5fold_report_table(md_path, schema_name, distances):
             except Exception:
                 params = {}
             records.append({
-                'Distance_mm': dist,
+                'Distance_deg': dist,
                 'Schema': schema,
                 'Model': model,
                 'Test_R2_Report': r2,
@@ -177,29 +180,61 @@ def collect_out_of_fold_predictions(model_name, params, X, y, groups, y_stratify
 
 
 def plot_scatter_observed_predicted(y_true, y_pred, cv_metrics, title, out_path):
+    """仿 orgData/示意图-线性.png 风格：白底、黑圈、虚线为 Identity、实线为拟合线。"""
     corr = np.corrcoef(y_true, y_pred)[0, 1]
     r2 = cv_metrics['mean_r2']
     rmse = cv_metrics['mean_rmse']
     mape_val = cv_metrics['mean_mape']
+    n = len(y_true)
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.scatter(y_true, y_pred, edgecolors='k', facecolors='steelblue', alpha=0.7, s=60)
+    fig.patch.set_facecolor('white')
+    ax.set_facecolor('white')
+
+    # 坐标轴、刻度、标签设为黑色
+    for spine in ax.spines.values():
+        spine.set_color('black')
+    ax.tick_params(colors='black', which='both')
+    ax.xaxis.label.set_color('black')
+    ax.yaxis.label.set_color('black')
+    ax.title.set_color('black')
+
+    # 散点：白底 + 黑边圆圈（n = 71）
+    ax.scatter(y_true, y_pred, facecolors='white', edgecolors='black',
+               s=70, linewidths=1.2, label='Data', zorder=3)
+
     lims = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
-    ax.plot(lims, lims, 'r--', lw=1.5, label='Identity line')
+    # 留出 5% 边距，避免边缘点（大圆圈）被坐标轴裁切
+    pad = 0.05 * (lims[1] - lims[0])
+    lims = [lims[0] - pad, lims[1] + pad]
+
+    # 虚线：Identity / 标准参考线
+    ax.plot(lims, lims, 'k--', lw=1.5, label='Identity line', zorder=2)
+
+    # 实线：实际估计线（观测-预测回归拟合）
+    slope, intercept = np.polyfit(y_true, y_pred, 1)
+    x_line = np.linspace(lims[0], lims[1], 100)
+    y_line = slope * x_line + intercept
+    ax.plot(x_line, y_line, 'k-', lw=2.5, label='Fitting line', zorder=2)
+
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_xlabel('Observed Angular cone density (cones/deg²)')
     ax.set_ylabel('Predicted Angular cone density (cones/deg²)')
     ax.set_title(title)
-    textstr = f"5-fold mean R² = {r2:.3f}\n5-fold mean RMSE = {rmse:.1f}\n5-fold mean MAPE = {mape_val:.1f}%\nr = {corr:.3f}"
-    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    ax.legend(loc='lower right')
+
+    # 左上角标注 n 与指标
+    textstr = f"n={n}\nR² = {r2:.3f}\nRMSE = {rmse:.1f}\nMAPE = {mape_val:.1f}%\nr = {corr:.3f}"
+    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=11,
+            verticalalignment='top', color='black')
+
+    ax.legend(loc='lower right', facecolor='white', edgecolor='black',
+              labelcolor='black')
     ax.set_aspect('equal', adjustable='box')
     plt.tight_layout()
-    plt.savefig(out_path, format='pdf', bbox_inches='tight')
+    plt.savefig(out_path, format='pdf', bbox_inches='tight', facecolor='white')
     png_path = str(out_path).replace('.pdf', '.png')
-    plt.savefig(png_path, format='png', dpi=300, bbox_inches='tight')
+    plt.savefig(png_path, format='png', dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     print(f"  -> Scatter PDF: {out_path}")
     print(f"  -> Scatter PNG: {png_path}")
@@ -245,7 +280,7 @@ def compute_y_std_per_distance(all_data, eye_to_subject, distances, min_quadrant
 def add_standardized_rmse_mse(df, std_map):
     """根据每个距离的目标变量标准差，添加 Test_RMSE_std 和 Test_MSE_std 列。"""
     df = df.copy()
-    df['Y_Std'] = df['Distance_mm'].map(std_map)
+    df['Y_Std'] = df['Distance_deg'].map(std_map)
     df['Test_RMSE_std'] = df['Test_RMSE'] / df['Y_Std']
     df['Test_MSE_std'] = df['Test_RMSE_std'] ** 2
     return df
@@ -264,7 +299,7 @@ def main():
     rows = []
     for _, prow in df_params.iterrows():
         rows.append({
-            'Distance_mm': prow['Distance_mm'],
+            'Distance_deg': prow['Distance_deg'],
             'Schema': SCHEMA_NAME,
             'Model': prow['Model'],
             'Test_R2': prow['Test_R2_Report'],
@@ -288,7 +323,7 @@ def main():
             n_splits=N_SPLITS_5, random_state=RANDOM_STATE
         )
         rows.append({
-            'Distance_mm': dist,
+            'Distance_deg': dist,
             'Schema': SCHEMA_NAME,
             'Model': 'Multiple_Linear_Regression',
             'Test_R2': res_ols['test_r2'],
@@ -297,7 +332,7 @@ def main():
             'Gap': res_ols['gap'],
             'Best_Params': '{}',
         })
-        print(f"  {dist:.1f} mm | Multiple_Linear_Regression | Test R2={res_ols['test_r2']:+.3f} | RMSE={res_ols['test_rmse']:.1f} | Gap={res_ols['gap']:.3f}")
+        print(f"  {dist:.1f}° | Multiple_Linear_Regression | Test R2={res_ols['test_r2']:+.3f} | RMSE={res_ols['test_rmse']:.1f} | Gap={res_ols['gap']:.3f}")
 
     df_perf = pd.DataFrame(rows)
 
@@ -305,13 +340,13 @@ def main():
     y_std_map = compute_y_std_per_distance(all_data, eye_to_subject, DISTANCES)
     df_perf = add_standardized_rmse_mse(df_perf, y_std_map)
 
-    df_perf = df_perf.sort_values(['Distance_mm', 'Test_R2'], ascending=[True, False])
+    df_perf = df_perf.sort_values(['Distance_deg', 'Test_R2'], ascending=[True, False])
     csv_path = os.path.join(OUT_TABLE_DIR, f'{OUT_PREFIX}.csv')
     df_perf.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f"\nSaved 5-fold performance CSV: {csv_path}")
 
     # 最佳模型 @ 1.5 mm
-    best_row = df_perf[df_perf['Distance_mm'] == 1.5].iloc[0]
+    best_row = df_perf[df_perf['Distance_deg'] == 1.5].iloc[0]
     best_model_name = best_row['Model']
     best_params = ast.literal_eval(best_row['Best_Params']) if best_row['Best_Params'] != '{}' else {}
     print(f"\n--- Best model @ 1.5 mm: {best_model_name} ---")
@@ -384,10 +419,10 @@ def main():
     md.append("## 一、各距离模型性能（5-fold）\n\n")
     md.append("> `RMSE_std` = RMSE / SD(y)，`MSE_std` = RMSE_std²；即目标变量标准化后的误差，便于跨研究比较。\n\n")
     for dist in DISTANCES:
-        md.append(f"### {dist:.1f} mm\n\n")
+        md.append(f"### {dist:.1f}°\n\n")
         md.append("| Model | Test R² | RMSE | MSE | RMSE_std | MSE_std | Gap | Best Params |\n")
         md.append("|-------|---------|------|-----|----------|---------|-----|-------------|\n")
-        sub = df_perf[df_perf['Distance_mm'] == dist]
+        sub = df_perf[df_perf['Distance_deg'] == dist]
         for _, row in sub.iterrows():
             md.append(f"| {row['Model']} | {row['Test_R2']:.3f} | {row['Test_RMSE']:.1f} | "
                       f"{row['Test_MSE']:.1f} | {row['Test_RMSE_std']:.3f} | {row['Test_MSE_std']:.3f} | "

@@ -18,6 +18,11 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+# 全局字体设置：Calibri 为首选，中文回退
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
+
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 import scipy.stats as stats

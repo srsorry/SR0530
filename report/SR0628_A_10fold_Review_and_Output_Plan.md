@@ -23,7 +23,7 @@
 
 ### 2. 各距离单次 10-fold 最佳结果
 
-| 距离 (mm) | 最佳方案 | 最佳模型 | Test R² (95% CI) | RMSE (95% CI) | Gap |
+| 距离 (°) | 最佳方案 | 最佳模型 | Test R² (95% CI) | RMSE (95% CI) | Gap |
 |-----------|----------|---------|------------------|----------------|-----|
 | 1.0 | C1_Combined_ALK | ElasticNet | 0.355 [-0.010, 0.719] | 476.3 [278.8, 673.8] | 0.149 |
 | 1.5 | C1_Combined_ALK | Robust_Linear_Regression | 0.504 [0.326, 0.682] | 458.0 [200.2, 715.8] | 0.081 |
@@ -41,7 +41,7 @@
 
 从 `SR0530_HP_Tuning_Results_robust_repeatedCV_all_distances.csv` 看：
 
-| 距离 (mm) | 最佳方案（重复 CV） | 最佳模型 | 重复 CV Test R² | Test R² Std | Gap |
+| 距离 (°) | 最佳方案（重复 CV） | 最佳模型 | 重复 CV Test R² | Test R² Std | Gap |
 |-----------|---------------------|---------|----------------|-------------|-----|
 | 1.0 | C1_Combined_ALK | ElasticNet | 0.362 | 0.307 | 0.146 |
 | 1.5 | C1_Combined_ALK | ElasticNet | **0.395** | 0.292 | 0.196 |
@@ -81,7 +81,7 @@
 | B | `report/SR0628_B_Single_vs_Repeated_CV_Comparison.md` | 对比单次 10-fold 与重复 CV：各距离最佳 R²/RMSE、Gap、 optimism 量化；附折线/柱状图 | **高** | 中 |
 | C | `report/SR0628_C_Best_RepeatedCV_Diagnostics.md` | 基于重复 CV 最佳配置（C1_Combined_ALK / ElasticNet @ 1.5 mm）生成学习曲线、Observed vs Predicted、残差 QQ、残差 vs 预测、SHAP summary | **高** | 高 |
 | D | `report/SR0628_D_Distance_Performance_Summary.md` | 距离-性能汇总图：R² / RMSE 随距离变化（单次 10-fold vs 重复 CV），PDF 输出 | 中 | 中 |
-| E | `report/SR0628_E_Model_Comparison_1.5mm.md` | 1.5 mm 处 8 模型箱线图/小提琴图比较 fold-level R²；附超参数敏感度简表 | 中 | 中 |
+| E | `report/SR0628_E_Model_Comparison_1.5mm.md` | 1.5° 处 8 模型箱线图/小提琴图比较 fold-level R²；附超参数敏感度简表 | 中 | 中 |
 | F | `report/SR0628_F_Coefficient_Stability.md` | 最佳线性模型（ElasticNet/Robust LR）在重复 CV 下的系数/特征重要性稳定性，输出每个特征的均值 ± SD 及 95% CI | 中 | 高 |
 | G | `report/SR0628_G_Updated_Lenient_ALK_Summary.md` | 在现有 lenient_ALK 总结报告中追加“重复 CV 稳健性说明”与推荐报告值 | 低 | 低 |
 
