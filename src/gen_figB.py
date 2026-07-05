@@ -81,7 +81,7 @@ def load_1mm_aggregated(data_dir):
         'Eye': 'first',
     }
 
-    grouped = df_all.groupby(['Subject_ID', 'Eccentricity (mm)'], as_index=False).agg(agg_dict)
+    grouped = df_all.groupby(['Subject_ID', 'Eye', 'Eccentricity (mm)'], as_index=False).agg(agg_dict)
 
     # 取 1.0°
     df_1mm = grouped[grouped['Eccentricity (mm)'] == 1.0].copy().reset_index(drop=True)
@@ -100,12 +100,8 @@ def genFig1(df):
 
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
 
-    plt.figure(figsize=(8, 6), dpi=150)
-    sns.set_theme(style="ticks")
-    # re-apply Calibri after sns.set_theme overrides rcParams
-    plt.rcParams['pdf.fonttype'] = 42
-    plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
-    plt.rcParams['axes.unicode_minus'] = False
+    fig, ax = plt.subplots(figsize=(7, 6))
+    plt.rcParams['figure.dpi'] = 150
 
     plt.scatter(x, y, color='dodgerblue', edgecolor='none', s=60, alpha=0.85, zorder=2)
 
@@ -129,7 +125,10 @@ def genFig1(df):
              verticalalignment='top', horizontalalignment='right',
              bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='gray'))
 
-    sns.despine()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(True, alpha=0.12, linestyle='-')
+    ax.tick_params(labelsize=12)
     plt.tight_layout()
     plt.savefig(OUTPUT_PDF1, format='pdf', dpi=1200, bbox_inches='tight')
     plt.savefig(OUTPUT_PDF1.replace('.pdf', '.png'), format='png', dpi=300, bbox_inches='tight')
