@@ -31,7 +31,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_lenient')
 FILE_PATTERN = 'data*.csv'
 
-OUTPUT_DIR = os.path.join(BASE_DIR, 'genData', 'FIGA')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'report', 'FIG', 'FIGA')
 
 # P 值显示控制参数
 P_VALUE_STYLE = 'auto'           # 'auto' / 'scientific' / 'float'
@@ -117,7 +117,7 @@ def load_and_aggregate(data_dir, file_pattern='data*.csv'):
         'Patient_ID': 'first',
     }
 
-    grouped = df_all.groupby(['Subject_ID', 'Eccentricity (mm)'], as_index=False).agg(agg_dict)
+    grouped = df_all.groupby(['Subject_ID', 'Eye', 'Eccentricity (mm)'], as_index=False).agg(agg_dict)
 
     # 4. 按距离拆分为字典
     distance_dict = {}
@@ -152,7 +152,7 @@ def draw_figure_1mm(distance_dict):
     sig = p < 0.05
 
     ax.scatter(x, y, c=[color], s=70, zorder=3,
-               edgecolors='black', linewidth=0.6, alpha=0.85)
+               edgecolors='none', alpha=0.85)
     x_line = np.linspace(x.min(), x.max(), 100)
     ax.plot(x_line, slope * x_line + intercept,
             color='black', linewidth=2.0 if sig else 1.5,
@@ -184,7 +184,7 @@ def draw_figure_1mm(distance_dict):
     sig = p < 0.05
 
     ax.scatter(x, y, c=[color], s=70, zorder=3,
-               edgecolors='black', linewidth=0.6, alpha=0.85, marker='o')
+               edgecolors='none', alpha=0.85, marker='o')
     ax.plot(x_line, slope * x_line + intercept,
             color='black', linewidth=2.0 if sig else 1.5,
             linestyle='-' if sig else ':', zorder=2)
@@ -211,8 +211,9 @@ def draw_figure_1mm(distance_dict):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out_pdf = os.path.join(OUTPUT_DIR, f"{OUTPUT_1MM}.pdf")
     fig.savefig(out_pdf, format='pdf', bbox_inches='tight', pad_inches=0.2, facecolor='white')
+    out_png = os.path.join(OUTPUT_DIR, f"{OUTPUT_1MM}.png")
+    fig.savefig(out_png, format='png', dpi=300, bbox_inches='tight', pad_inches=0.2, facecolor='white')
     print(f"[OK] 1.0° 图已保存: {out_pdf}")
-    plt.show()
 
     return fig
 
@@ -244,7 +245,7 @@ def draw_figure_others(distance_dict):
         sig = p < 0.05
 
         axA.scatter(x, y, c=[colors[i]], s=50, zorder=3,
-                    edgecolors='black', linewidth=0.5, alpha=0.85)
+                    edgecolors='none', alpha=0.85)
 
         x_line = np.linspace(x.min(), x.max(), 100)
         axA.plot(x_line, slope * x_line + intercept,
@@ -270,7 +271,7 @@ def draw_figure_others(distance_dict):
         txt = f"{s['label']} {'*' if s['sig'] else ''}P = {formatted_p}"
         handles_A.append(
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
-                       markersize=9, markeredgecolor='black', markeredgewidth=0.5, label=txt)
+                       markersize=9, label=txt)
         )
     axA.legend(handles=handles_A, loc='upper left', bbox_to_anchor=(1.02, 1.0),
                fontsize=11, frameon=False, title='Eccentricity', title_fontsize=12)
@@ -288,7 +289,7 @@ def draw_figure_others(distance_dict):
         sig = p < 0.05
 
         axB.scatter(x, y, c=[colors[i]], s=50, zorder=3,
-                    edgecolors='black', linewidth=0.5, alpha=0.85)
+                    edgecolors='none', alpha=0.85)
 
         x_line = np.linspace(x.min(), x.max(), 100)
         axB.plot(x_line, slope * x_line + intercept,
@@ -314,7 +315,7 @@ def draw_figure_others(distance_dict):
         txt = f"{s['label']} {'*' if s['sig'] else ''}P = {formatted_p}"
         handles_B.append(
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
-                       markersize=9, markeredgecolor='black', markeredgewidth=0.5, label=txt)
+                       markersize=9, label=txt)
         )
     axB.legend(handles=handles_B, loc='upper left', bbox_to_anchor=(1.02, 1.0),
                fontsize=11, frameon=False, title='Eccentricity', title_fontsize=12)
@@ -325,9 +326,10 @@ def draw_figure_others(distance_dict):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out_pdf = os.path.join(OUTPUT_DIR, f"{OUTPUT_OTHERS}.pdf")
     fig.savefig(out_pdf, format='pdf', bbox_inches='tight', pad_inches=0.2, facecolor='white')
+    out_png = os.path.join(OUTPUT_DIR, f"{OUTPUT_OTHERS}.png")
+    fig.savefig(out_png, format='png', dpi=300, bbox_inches='tight', pad_inches=0.2, facecolor='white')
 
     print(f"[OK] 1.5–6.0 mm 图已保存: {out_pdf}")
-    plt.show()
 
     return fig
 

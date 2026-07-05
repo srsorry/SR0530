@@ -203,13 +203,16 @@ def collect_out_of_fold_predictions(model_name, model_config, params, X, y, grou
         r2_list.append(r2_score(yv, pred))
         rmse_list.append(np.sqrt(mean_squared_error(yv, pred)))
         mape_list.append(mape(yv, pred))
+    pooled_r2 = r2_score(all_true, all_pred)
+    pooled_rmse = np.sqrt(mean_squared_error(all_true, all_pred))
+    pooled_mape = mape(all_true, all_pred)
     metrics = {
-        'mean_r2': np.mean(r2_list),
-        'std_r2': np.std(r2_list, ddof=1),
-        'mean_rmse': np.mean(rmse_list),
-        'std_rmse': np.std(rmse_list, ddof=1),
-        'mean_mape': np.mean(mape_list),
-        'std_mape': np.std(mape_list, ddof=1),
+        'mean_r2': np.mean(r2_list),      'std_r2': np.std(r2_list, ddof=1),
+        'pooled_r2': pooled_r2,
+        'mean_rmse': np.mean(rmse_list),  'std_rmse': np.std(rmse_list, ddof=1),
+        'pooled_rmse': pooled_rmse,
+        'mean_mape': np.mean(mape_list),  'std_mape': np.std(mape_list, ddof=1),
+        'pooled_mape': pooled_mape,
     }
     return all_true, all_pred, metrics
 
@@ -219,9 +222,9 @@ def plot_scatter_observed_predicted(y_true, y_pred, cv_metrics, title, out_path)
     # 全样本的 Pearson r（用于展示预测与观测的相关性）
     corr = np.corrcoef(y_true, y_pred)[0, 1]
     # 散点图使用 10-fold 平均指标进行标注，避免跨折聚合带来的乐观偏差
-    r2 = cv_metrics['mean_r2']
-    rmse = cv_metrics['mean_rmse']
-    mape_val = cv_metrics['mean_mape']
+    r2 = cv_metrics.get('pooled_r2', cv_metrics['mean_r2'])
+    rmse = cv_metrics.get('pooled_rmse', cv_metrics['mean_rmse'])
+    mape_val = cv_metrics.get('pooled_mape', cv_metrics['mean_mape'])
     n = len(y_true)
 
     fig, ax = plt.subplots(figsize=(6, 6))

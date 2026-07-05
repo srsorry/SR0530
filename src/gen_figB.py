@@ -32,7 +32,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ================= 配置区 =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, 'genData', 'CleanDataRoi_lenient')
-OUTPUT_DIR = os.path.join(BASE_DIR, 'genData', 'FIGB')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'report', 'FIG', 'FIGB')
 SUM_DIR = os.path.join(BASE_DIR, 'genData', 'sum')
 
 OUTPUT_PDF1 = os.path.join(OUTPUT_DIR, 'FIGB1.pdf')
@@ -107,7 +107,7 @@ def genFig1(df):
     plt.rcParams['font.sans-serif'] = ['Calibri', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
     plt.rcParams['axes.unicode_minus'] = False
 
-    plt.scatter(x, y, color='dodgerblue', edgecolor='black', s=60, alpha=0.8, zorder=2)
+    plt.scatter(x, y, color='dodgerblue', edgecolor='none', s=60, alpha=0.85, zorder=2)
 
     x_fit = np.linspace(x.min(), x.max(), 100)
     y_fit = slope * x_fit + intercept
@@ -132,10 +132,9 @@ def genFig1(df):
     sns.despine()
     plt.tight_layout()
     plt.savefig(OUTPUT_PDF1, format='pdf', dpi=1200, bbox_inches='tight')
+    plt.savefig(OUTPUT_PDF1.replace('.pdf', '.png'), format='png', dpi=300, bbox_inches='tight')
     print(f"[OK] FIGB1 已保存: {OUTPUT_PDF1}")
     print(f"[INFO] SE vs AL: {eq_str}, r = {r_value:.3f}, P = {p_value:.2e}")
-    if 'agg' not in matplotlib.get_backend().lower():
-        plt.show()
 
 
 def standardize(series):
@@ -267,9 +266,8 @@ def genFig2(df):
     # 为左侧长标签（SER、ACD）预留充足空间
     plt.tight_layout(rect=[0.32, 0, 1, 1])
     plt.savefig(OUTPUT_PDF2, bbox_inches='tight', facecolor='white')
+    plt.savefig(OUTPUT_PDF2.replace('.pdf', '.png'), format='png', dpi=300, bbox_inches='tight')
     print(f"[OK] FIGB2 已保存: {OUTPUT_PDF2}")
-    if 'agg' not in matplotlib.get_backend().lower():
-        plt.show()
 
     return res_df
 
