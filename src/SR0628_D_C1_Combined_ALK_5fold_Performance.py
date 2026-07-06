@@ -190,21 +190,18 @@ def plot_scatter_observed_predicted(y_true, y_pred, cv_metrics, title, out_path)
     mape_val = cv_metrics.get('pooled_mape', cv_metrics['mean_mape'])
     n = len(y_true)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(7, 6))
     fig.patch.set_facecolor('white')
     ax.set_facecolor('white')
 
     # 坐标轴、刻度、标签设为黑色
-    for spine in ax.spines.values():
-        spine.set_color('black')
-    ax.tick_params(colors='black', which='both')
-    ax.xaxis.label.set_color('black')
-    ax.yaxis.label.set_color('black')
-    ax.title.set_color('black')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(True, alpha=0.12, linestyle='-')
 
     # 散点：白底 + 黑边圆圈（n = 71）
-    ax.scatter(y_true, y_pred, facecolors='white', edgecolors='black',
-               s=70, linewidths=1.2, label='Data', zorder=3)
+    ax.scatter(y_true, y_pred, c='dodgerblue', edgecolors='none',
+               s=70, alpha=0.85, label='Data', zorder=3)
 
     lims = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
     # 留出 5% 边距，避免边缘点（大圆圈）被坐标轴裁切
@@ -228,10 +225,10 @@ def plot_scatter_observed_predicted(y_true, y_pred, cv_metrics, title, out_path)
 
     # 左上角标注 n 与指标
     textstr = f"n={n}\nR² = {r2:.3f}\nRMSE = {rmse:.1f}\nMAPE = {mape_val:.1f}%\nr = {corr:.3f}"
-    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=11,
+    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=12,
             verticalalignment='top', color='black')
 
-    ax.legend(loc='lower right', facecolor='white', edgecolor='black',
+    ax.legend(loc='lower right', facecolor='white', edgecolor='none',
               labelcolor='black')
     ax.set_aspect('equal', adjustable='box')
     plt.tight_layout()
@@ -257,7 +254,7 @@ def plot_shap_summary(exp, title, out_path):
 
 
 def plot_qq_residuals(residuals, title, out_path):
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(7, 6))
     qqplot(np.asarray(residuals), line='s', ax=ax)
     ax.set_title(title)
     ax.set_xlabel('Theoretical quantiles')

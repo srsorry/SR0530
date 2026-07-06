@@ -63,7 +63,7 @@ Spherical Equivalent Refraction (D) vs Axial Length (mm)，含线性回归方程
 
 ## 四、机器学习预测性能
 
-### 4.1 5-fold CV 性能汇总（C1_Combined_ALK）
+### 4.1 5-fold CV 性能（C1_Combined_ALK）
 
 | 偏心率 | 最佳模型 | R^2 | RMSE | MSE |
 |--------|----------|-----|------|-----|
@@ -71,33 +71,33 @@ Spherical Equivalent Refraction (D) vs Axial Length (mm)，含线性回归方程
 | 5.0 deg | Neural Network | 0.370 | 587.5 | 345,156 |
 | 5.5 deg | Neural Network | 0.363 | 651.2 | 424,061 |
 
-> 5-fold GroupKFold by Subject，Myopia 分层。1.5 deg 处预测性能最优，Lasso 线性模型简洁可解释。全模型非负。
+> 5-fold GroupKFold by Subject，Myopia 分层。全部模型非负。
 
-### 4.2 最佳模型 @ 1.5 deg：Lasso 诊断图
+### 4.2 10-fold CV 性能（C1_Combined_ALK）
 
-**Observed vs Predicted 散点图**
+| 偏心率 | 最佳模型 | R^2 | RMSE | MSE |
+|--------|----------|-----|------|-----|
+| 1.5 deg | Robust Linear | 0.504 | 458.0 | 209,764 |
+| 5.0 deg | SVM | 0.039 | 635.1 | 403,352 |
+| 5.5 deg | SVM | 0.145 | 624.5 | 390,000 |
 
-![Lasso Scatter](FIG/SR0628_D/SR0628_D_Scatter_Lasso_C1_Combined_ALK_1.5mm.png)
+> 10-fold GroupKFold by Subject，Myopia 分层。5.0/5.5 deg 处除 SVM 外均为负值，预测能力有限。
 
-n=71 eyes，含 5-fold CV 均值 R^2/RMSE/MAPE，全样本 Pearson r。
+### 4.3 最佳模型 @ 1.5 deg 诊断图
 
-[下载 PDF](FIG/SR0628_D/SR0628_D_Scatter_Lasso_C1_Combined_ALK_1.5mm.pdf)
+**5-fold Lasso（R^2=0.611）**
 
-**SHAP 特征重要性**
+| Observed vs Predicted | SHAP | Residual Q-Q |
+|:---:|:---:|:---:|
+| ![Lasso Scatter](FIG/SR0628_D/SR0628_D_Scatter_Lasso_C1_Combined_ALK_1.5mm.png) | ![Lasso SHAP](FIG/SR0628_D/SR0628_D_SHAP_Lasso_C1_Combined_ALK_1.5mm.png) | ![Lasso QQ](FIG/SR0628_D/SR0628_D_QQ_Residuals_Lasso_C1_Combined_ALK_1.5mm.png) |
+| [PDF](FIG/SR0628_D/SR0628_D_Scatter_Lasso_C1_Combined_ALK_1.5mm.pdf) | [PDF](FIG/SR0628_D/SR0628_D_SHAP_Lasso_C1_Combined_ALK_1.5mm.pdf) | [PDF](FIG/SR0628_D/SR0628_D_QQ_Residuals_Lasso_C1_Combined_ALK_1.5mm.pdf) |
 
-![Lasso SHAP](FIG/SR0628_D/SR0628_D_SHAP_Lasso_C1_Combined_ALK_1.5mm.png)
+**10-fold Robust Linear Regression（R^2=0.504）**
 
-SHAP summary plot，展示各特征对预测密度值的边际贡献方向与大小。
-
-[下载 PDF](FIG/SR0628_D/SR0628_D_SHAP_Lasso_C1_Combined_ALK_1.5mm.pdf)
-
-**残差 Q-Q 图**
-
-![Lasso QQ](FIG/SR0628_D/SR0628_D_QQ_Residuals_Lasso_C1_Combined_ALK_1.5mm.png)
-
-Lasso 回归标准化残差的 Q-Q 图，n=71 eyes。
-
-[下载 PDF](FIG/SR0628_D/SR0628_D_QQ_Residuals_Lasso_C1_Combined_ALK_1.5mm.pdf)
+| Observed vs Predicted | SHAP | Residual Q-Q |
+|:---:|:---:|:---:|
+| ![Robust Scatter](FIG/SR0628_B/SR0628_B_Scatter_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.png) | ![Robust SHAP](FIG/SR0628_B/SR0628_B_SHAP_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.png) | ![Robust QQ](FIG/SR0628_B/SR0628_B_QQ_Residuals_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.png) |
+| [PDF](FIG/SR0628_B/SR0628_B_Scatter_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf) | [PDF](FIG/SR0628_B/SR0628_B_SHAP_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf) | [PDF](FIG/SR0628_B/SR0628_B_QQ_Residuals_Robust_Linear_Regression_C1_Combined_ALK_1.5mm.pdf) |
 
 ---
 
